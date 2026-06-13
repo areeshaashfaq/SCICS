@@ -1,0 +1,33 @@
+Patient Male, 53 Year old
+Diagnosis During This Admission :
+KNOWN CASE RIGHT SIDED RENAL CELL CARCINOMA (2016 BIOPSY PROVEN CLEAR CELL CARCINOMA GRADE 2 ), DM 12
+
+Background Medical Problem(s)( List any chronic medical conditions that the patient may have, such as diabetes mellitus, asthma,hypertension etc):
+
+Reason for Admission:
+CONFUSION AND INCREASED SLEEPINESS FOR PAST 10 DAYS
+Significant Physical Findings on Admission : 
+RAISED BLOOD SUGARS WERE FOUND THROUGHOUT BSR MONITORING.
+HAD BEEN OFF INSULIN FOR 10 DAYS AS WAS SYMPTOMATIC AND HIS GLUCOMETER WAS SHOWING LOW BLOOD SUGARS IN FASIING AND
+RANDOM AS WELL.
+GCS 15/15
+HMF INTACT
+NO REMARKABLE SYSTEMIC EXAMINATION FINDINGS.
+
+Management During Admission :
+BSR MONITORING 2-4H
+
+Diagnostic StTherapeutic Procedures Performed :
+RBS 329
+URINARY KETONES -VE
+
+Condition at Discharge:
+STABLE
+
+Followup Instructions:
+DC ON
+TAB METFORMIN 500MG BD
+CHANGE GLUCOMETER FOR HOME BSR MONITORING.
+
+Significant Tests/Problems to Address on Followup:
+WILL FOLLOW IN OPD 14 (DIABETIC OPD) AS PREVIOUSLY BEING FOLLOWED BY DIABETIC TEAM.

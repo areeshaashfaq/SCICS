@@ -1,0 +1,21 @@
+Patient male, 20 years old
+Diagnosis During This Admission :
+K/C MEMBRANI OUS GN(ANTIPLA2R POSITIVE ), I BRONCHIACIATIC LUNG; CAP STREPTOCOCCUS PNEUMONAE
+
+Backqround Medical Problem(s)( List any chronic medical conditions that the pationt may have, such as diabetes mellituS, asthma, hy hypertension etc.):
+Reason for Admission:
+KNOWN CASE MEMBRANIOUS GN (ANTI PLA2R POSITIVE )
+ADMITTED WITH COMPLAIN COUGH, BlOOD IN SPUTUM AND FEVER FOR 10 DAYS
+SPUTUM SIRIPIOCCOCCUS PNEUMONAE (PANSENSITIVE)
+
+Physical Findings on Admission :
+Clll-Si H/l 'Q UA: AIR I MIRY, NVIi
+RI SI WAS ONRI AMARKAHI I
+CXR: I URONCHIACIAI IC: I UNG
+
+Diagnostic & Therapeutic Procedures Performed:
+SPUTUM ANAIYSIS
+
+Condition at Discharge:
+STABLE
+

@@ -1,0 +1,34 @@
+Patient Female, 32 years old
+
+Diagnosis During This Admission :
+VIRAL PNEUONITIS
+
+Background Medical Problem(s) (List any chronic medical conditions that the patient may have, such as diabetes mellitus, asthma, hypertension etc.):
+Reason for Admission:
+SOB
+FEVER
+BODY SWELLING
+
+Significant Physical Findings on Admission:
+CHEST WHEEZES AND CREPTS
+
+Management During Admission :
+COVID PCR AND RESP PANNEL SENT
+RESP B VIRUS POSITIVE
+ECHO CONCENTRIC LV HYPERTROPHY EF 70%
+HIGH NORMAL RV SIZE
+MILD PULMONARY ARTERY HYPERTENSION 42MMHG
+QUERY OF ADEXENAL MASS REPEATED US SHOWED SUBSEROSAL FIBROID 8.6 X 8.6 MM INTEMAL CYSTIC DIGENRATION
+HRCTDONE :PROVISIONAL : B/L GROUNG GLASS APPERANCE
+NO CONSOLIDATION
+TAB AMLODIPINE 5MG ESCLATED TO LOSARTAN 50G OD
+CAP OMEPRAZOLE 40MG OD
+Diagnostic &Therapeutic Procedures Performed ; FOLEYS CATHETER ON 21/6/25 REMOVED ON 23/6/25
+Condition at Discharge:
+STABLE
+Followup Instructions;
+FOLLOW UP AFTER I WEEK IN IM OPD
+TX ON DC
+TAB COMBIVAIR 400/5 VIA ROTACAP INHALER BD
+TAB LOSARTAN 50MG OD
+Significant Tests/Problems to Address on Followup: CBC.UCE

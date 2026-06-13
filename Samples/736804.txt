@@ -1,0 +1,29 @@
+Patient Female, 52 years old
+
+Diagnosis During This Admission :
+Background Medical Problem(s)( List any chronic medical conditions that the patient may have,s uch as diabetes mellitus, asthma, hypertension etc.): 
+
+Reason for Admission: 
+EPIGASTRIC BURNING
+NUMBNESS
+IDA/ANAL FISSURE
+Significant Physical Findings on Admission :
+anal fisure
+
+Management During Admission :
+T  	NEUROBION
+T	IBRETFOUC OD
+SYP MUCAINE 2 TSF BD
+XYLOCAINE GEL LA BD
+0.2 PERCENT GTN LA TDS
+
+Diagnostic & Therapeutic Procedures Performed :
+ENDOSCOPY shows fissuring of distal duodenum and pangastric erythema 
+
+Condition at Discharge:
+STABLE
+
+Followup Instructions:
+CONTINUE IBRET FOLATE AND NEUROBION OD
+Significant Tests/Problems to Address on Followup: 
+cbt with p. film, retic count

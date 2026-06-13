@@ -1,0 +1,53 @@
+Patient Female, 24 years old
+Diagnosis During This Admission:
+wegener's granumatosis
+Background Medical Problem(s) (List any chronic medical conditions that the patient may have, such as diabetes mellitus, asthma, hypertension etc.):
+
+Reason for Admission:
+abdonimai pain 
+cough
+decrease
+appetitw
+for 2 months
+
+Significant Physical Findings on Admission : 
+B/L LOWER ZONE CREPTS
+
+Management During Admission :
+INJ METHYL PRED
+TAB FOLIC ACID
+TAB NEUROBION
+TAB DELTA
+CAP RISEK
+INJ CLEXANE
+TAB SEPTRAN DS
+INJ VIT D 2 LAC
+SYP DUPHALAC
+NILSTAT DROPS
+MOVCAL SACHET
+CAP DIFLUCAN
+
+Diagnostic & Therapeutic Procedures Performed : 
+BAL DONE 4/6/2025
+
+Condition at Discharge:
+STABLE
+TAB FOUC ACID
+TAB NEUROBION
+TAB DELTA
+CAP RISEK
+TAB SEPTRAN DS
+CAP VIT D 50000
+SYP DUPHALAC
+NILSTAT DROPS
+MOVCAL SACHET
+CAP DIFLUCAN FOR 10 DAYS
+
+Followup Instructions:
+FOLLOW UP IN IM OPD AFTER 2 WEEKS
+
+Significant Tests/Problems to Address on Followup:
+CBC
+UCE
+LET
+P.FILM
