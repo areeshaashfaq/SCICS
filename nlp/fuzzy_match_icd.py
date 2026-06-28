@@ -12,7 +12,7 @@ from rapidfuzz import process, fuzz
 
 # Load ICD-10 WHO CSV once at import 
 
-_CSV_PATH = os.path.join(os.path.dirname(__file__), "icd10_2019.csv")
+_CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "icd10_2019.csv")
 _icd_df   = pd.read_csv(_CSV_PATH)
 _icd_df["sub-code"]   = _icd_df["sub-code"].astype(str).str.strip()
 _icd_df["definition"] = _icd_df["definition"].astype(str).str.strip()
@@ -250,7 +250,8 @@ def run_fuzzy_matching(entities, threshold=75):
             ent["ambiguity_reason"] = ambiguity_reason
 
         else:
-            #6. No match            ent.update({
+            # 6. No match
+            ent.update({
                 "icd_code":        None,
                 "confidence_score": None,
                 "icd_description": None,

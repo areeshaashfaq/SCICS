@@ -2,16 +2,15 @@ import os
 import re
 
 
-# ---------------------------------------------------------------------------
 # STEP 1 — FILE LOADING
-# ---------------------------------------------------------------------------
-
 def load_file(filepath):
     with open(filepath, "r") as f:
         return f.read()
 
 
-def load_all_samples(folder="Samples"):
+def load_all_samples(folder=None):
+    if folder is None:
+        folder = os.path.join(os.path.dirname(__file__), "..", "Samples")
     all_files = {}
     for filename in os.listdir(folder):
         if filename.endswith(".txt"):
@@ -19,29 +18,18 @@ def load_all_samples(folder="Samples"):
     return all_files
 
 
-# ---------------------------------------------------------------------------
 # STEP 2 — TEXT CLEANING
-# ---------------------------------------------------------------------------
-
 def clean_text(raw_text):
     text = raw_text.lower()
     text = re.sub(r'\d{2}-[a-z]{3}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*', '', text)  # strip timestamps
-    text = re.sub(r'[ \t]+', ' ', text)       # collapse spaces/tabs
-    text = re.sub(r'\n{3,}', '\n\n', text)    # collapse excess blank lines
-    # Fix run-together words like "HRCTDONE" → "HRCT DONE", "DIAGNOSTICSTTHERAPEUTIC" etc.
-    # Inserts a space before known procedure keywords when they're fused with the next word.
+    text = re.sub(r'[ \t]+', ' ', text)  # collapse spaces/tabs
+    text = re.sub(r'\n{3,}', '\n\n', text)  # collapse excess blank lines
     text = re.sub(r'\b(hrct|echo|mri|egd|bal|ct|us|cxr)(done|showed|showing|performed|reported)',
                   r'\1 \2', text, flags=re.IGNORECASE)
     return text.strip()
 
 
-# ---------------------------------------------------------------------------
 # STEP 3 — SECTION PARSING
-# ---------------------------------------------------------------------------
-
-# Each entry is (canonical_key, regex_pattern).
-# Patterns are matched case-insensitively against each line of the cleaned text.
-# The order here matters — earlier entries take priority if a line could match two.
 SECTION_PATTERNS = [
     ("patient_header",        r"^patient\s+(male|female)"),
     ("diagnosis",             r"diagnosis during this admission"),
@@ -55,26 +43,12 @@ SECTION_PATTERNS = [
     ("followup_tests",        r"significant tests.{0,10}problems to address"),
 ]
 
-# Pre-compile all patterns once so we don't recompile on every line
 _COMPILED = [(key, re.compile(pat, re.IGNORECASE)) for key, pat in SECTION_PATTERNS]
 
-
 def parse_sections(cleaned_text):
-    """
-    Split a cleaned discharge summary into its named sections.
+    #Split a cleaned discharge summary into its named sections.
 
-    Returns a dict:
-        {
-            "patient_header":         "patient male, 37 years old",
-            "diagnosis":              "known case of neuromyelitis optica ...",
-            "management":             "5 pulses of iv methylpred ...",
-            ...
-        }
-
-    Sections that are absent in the file will not appear as keys.
-    """
     lines = cleaned_text.splitlines()
-
     current_section = None
     sections = {}
     buffer = []
@@ -96,23 +70,18 @@ def parse_sections(cleaned_text):
                 break
 
         if matched_key:
-            flush()                  # save whatever we were collecting
+            flush() # save whatever we were collecting
             current_section = matched_key
-            buffer = []              # start fresh — the header line itself is not content
+            buffer = [] # start fresh — the header line itself is not content
         else:
-            if stripped:             # skip blank lines inside a section
+            if stripped:   # skip blank lines inside a section
                 buffer.append(stripped)
 
     flush()  # save the last section
     return sections
 
 
-# ---------------------------------------------------------------------------
 # STEP 4 — MEDICATION EXTRACTION
-# ---------------------------------------------------------------------------
-
-# Medication lines start with an optional "DC ON" discharge marker, then a drug form abbreviation.
-# Trailing \b is dropped intentionally — "TABQALSAN" (no space) still matches as TAB.
 _MED_PREFIX = re.compile(
     r"^[\-\d\.\s]*(dc\s+on\s+)?(tab|cap|inj|syp|syr|drp|drop|gel|oint|crm|cream|sachet|sol|soln|susp)",
     re.IGNORECASE
@@ -120,16 +89,7 @@ _MED_PREFIX = re.compile(
 
 
 def extract_medications(sections):
-    """
-    Pull medication lines from the two sections that contain them.
-
-    Returns a dict with two lists:
-        {
-            "inpatient":  ["inj methylpred 1g iv od", ...],   # from management
-            "discharge":  ["tab delta 1+1+0", ...]            # from followup_instructions
-                                                               # and condition_at_discharge
-        }
-    """
+    # Pull medication lines from the two sections that contain them.
     def pull_meds(text):
         meds = []
         for line in text.splitlines():
@@ -149,30 +109,14 @@ def extract_medications(sections):
     }
 
 
-# ---------------------------------------------------------------------------
 # STEP 5 — KNOWN-CASE TAGGER  (principal vs associate hint)
-# ---------------------------------------------------------------------------
-
 _KNOWN_CASE = re.compile(r"\bknown case\b|\bk/c\b|\bkc\b", re.IGNORECASE)
-
-# Doctors write chronic history first, then pivot to the new complaint with these phrases.
-# When found inside a chronic line, everything after this pivot is the acute (principal) part.
 _ACUTE_PIVOT = re.compile(
     r"\b(now with|presenting with|admitted with|presenting as|now presenting)\b",
     re.IGNORECASE
 )
 
 def tag_diagnosis_lines(diagnosis_text):
-    """
-    Split the diagnosis section into:
-        - chronic : "known case of X" lines → likely associate codes
-        - acute   : new complaint lines → likely principal code
-
-    Handles the pattern "KNOWN CASE OF X. NOW WITH Y" on a single line by
-    splitting at the pivot phrase — X goes to chronic, Y goes to acute.
-
-    This is a heuristic hint for the NLP stage, not a final coding decision.
-    """
     chronic, acute = [], []
     for line in diagnosis_text.splitlines():
         line = line.strip()
@@ -195,12 +139,7 @@ def tag_diagnosis_lines(diagnosis_text):
     return {"chronic": chronic, "acute": acute}
 
 
-# ---------------------------------------------------------------------------
 # STEP 6 — PROCEDURE EXTRACTION
-# ---------------------------------------------------------------------------
-
-# Named clinical procedures — these keywords in the procedures section indicate
-# a billable ICD-10-PCS procedure code is likely needed.
 _PROCEDURE_KEYWORDS = re.compile(
     r"\b("
     r"biopsy|endoscopy|egd|colonoscopy|sigmoidoscopy|bronchoscopy|bal|cystoscopy|"
@@ -219,10 +158,6 @@ _PROCEDURE_KEYWORDS = re.compile(
     re.IGNORECASE
 )
 
-# Pure numeric result lines — these are lab values, NOT procedures.
-# e.g. "RBS 329", "GCS 15/15", "Hb 10.9", "URINARY KETONES -VE"
-# IMPORTANT: a line is only a lab result if it does NOT also contain a procedure keyword.
-# "ECHO CONCENTRIC LV HYPERTROPHY EF 70%" ends with a number but is a procedure finding.
 _LAB_RESULT_ONLY = re.compile(
     r"^[\w\s/\.\(\)]+\s+[\d\.\-\+]+\s*(g/dl|mg/dl|iu|u/l|mmhg|%|ng/ml|g/l|meq/l|'?ve)?$",
     re.IGNORECASE
@@ -241,25 +176,6 @@ _PROCEDURE_VERB = re.compile(
 
 
 def extract_procedures(sections):
-    """
-    Identify procedure candidate lines from the discharge summary.
-
-    Scans ALL clinically relevant sections because procedures and findings
-    are documented in different places by different doctors:
-        - 'procedures'        → explicitly listed procedures (highest confidence)
-        - 'management'        → test results, imaging, transfusions done during stay
-        - 'physical_findings' → bedside procedures, documented exam findings
-        - 'reason_for_admission' → sometimes mentions prior procedures relevant to this visit
-
-    Returns a dict keyed by source section so the NLP layer can weight
-    suggestions from 'procedures' higher than from 'management':
-        {
-            "from_procedures":        ["bal done 4/6/2025", ...],
-            "from_management":        ["echo concentric lv hypertrophy ef 70%", ...],
-            "from_physical_findings": ["foleys catheter inserted", ...],
-            "from_reason":            [],
-        }
-    """
     def pull_procedures(text):
         candidates = []
         for line in text.splitlines():
@@ -282,9 +198,7 @@ def extract_procedures(sections):
     }
 
 
-# ---------------------------------------------------------------------------
 # MAIN — run all steps on every sample and print results
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     samples = load_all_samples()
@@ -308,6 +222,6 @@ if __name__ == "__main__":
         print(f"  Discharge meds           : {meds['discharge']}")
         print(f"  Procedures (procedures)  : {procs['from_procedures']}")
         print(f"  Procedures (management)  : {procs['from_management']}")
-        print(f"  Procedures (phys.findings: {procs['from_physical_findings']}")
+        print(f"  Procedures (phys.findings): {procs['from_physical_findings']}")
         print(f"  Procedures (reason)      : {procs['from_reason']}")
         print()
