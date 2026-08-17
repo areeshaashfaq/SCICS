@@ -7,8 +7,11 @@
 import os
 import re
 import pandas as pd
+import psycopg2
+from dotenv import load_dotenv
 from rapidfuzz import process, fuzz
 
+load_dotenv()
 
 # Load ICD-10 WHO CSV once at import 
 
@@ -23,14 +26,8 @@ _icd_definitions_lower = [d.lower() for d in _icd_definitions]
 
 
 #  Build synonym reverse-lookup from _CODE_SYNONYMS 
-# _CODE_SYNONYMS maps  code → [synonym, synonym, ...]
-# We invert it to synonym_phrase → (code, description)
-# Used in Pass A.
 
 def _build_reverse_synonym_map():
-    # Inverts _CODE_SYNONYMS so we can look up  synonym_phrase → (code, definition).
-    # For ICD-10-CM subcodes not in the WHO CSV (e.g. C64.1, K29.50),
-    # tries progressively shorter parent codes until a definition is found.
     from icd_synonyms import _CODE_SYNONYMS
 
     code_to_def = dict(zip(_icd_codes, _icd_definitions))
@@ -58,7 +55,26 @@ def _build_reverse_synonym_map():
     return reverse
 
 
+def _load_learned_synonyms():
+    # Load corrections-based synonyms from the database
+    try:
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            return {}
+        conn = psycopg2.connect(db_url + "?sslmode=require")
+        cur = conn.cursor()
+        cur.execute("SELECT phrase, icd_code FROM learned_synonyms")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return {phrase.lower().strip(): (icd_code, icd_code) for phrase, icd_code in rows}
+    except Exception as e:
+        print(f"Could not load learned synonyms: {e}")
+        return {}
+
+
 _SYNONYM_REVERSE = _build_reverse_synonym_map()
+_SYNONYM_REVERSE.update(_load_learned_synonyms())
 
 
 # Base confidence by section 
@@ -78,43 +94,33 @@ _DEFAULT_BASE_CONFIDENCE = 0.70
 # Pass A — synonym reverse-lookup 
 
 def _synonym_lookup(text):
-    # Returns (icd_code, definition) if extracted text matches a known synonym, else None.
-    # First tries exact match, then checks if any synonym is a substring of the text.
-    # Minimum synonym length of 4 chars prevents short noise words from matching.
     text_lower = text.lower().strip()
 
-    # Exact match first
     if text_lower in _SYNONYM_REVERSE:
         return _SYNONYM_REVERSE[text_lower]
 
-    # Substring match — longest matching synonym wins (avoid "uti" hitting "beautiful")
     best_syn   = None
     best_len   = 0
     best_match = None
 
     for syn, pair in _SYNONYM_REVERSE.items():
-        if len(syn) >= 4 and syn in text_lower:   # min 4 chars prevents short word noise
+        if len(syn) >= 4 and syn in text_lower:
             if len(syn) > best_len:
                 best_syn   = syn
                 best_len   = len(syn)
                 best_match = pair
 
-    return best_match   # None if nothing found
+    return best_match
 
 
 # Pass B — keyword-filtered fuzzy matching 
 
 def find_icd_matches(text, top_n=3, threshold=75):
-    # Fuzzy-match a clinical phrase against ICD-10 definitions.
-    # Returns up to top_n matches as dicts: {icd_code, definition, fuzzy_score}.
-    # Uses keyword pre-filter first to avoid false positives on 11,000+ rows.
     if not text or not text.strip():
         return []
 
     query = text.lower().strip()
 
-    # Step 1 — keyword pre-filter
-    # Only keep ICD definitions that share at least one 4+ char word with query.
     keywords = re.findall(r"[a-z]{4,}", query)
 
     if keywords:
@@ -124,16 +130,12 @@ def find_icd_matches(text, top_n=3, threshold=75):
         ]
         filtered_defs = [_icd_definitions_lower[i] for i in filtered_idx]
     else:
-        # Very short query (<4 char words) — search everything
         filtered_idx  = list(range(len(_icd_definitions_lower)))
         filtered_defs = _icd_definitions_lower
 
     if not filtered_defs:
         return []
 
-    # Step 2 — fuzzy score on filtered subset
-    # token_sort_ratio: sorts tokens alphabetically then does ratio.
-    # Less aggressive than token_set_ratio; requires mutual word overlap.
     results = process.extract(
         query,
         filtered_defs,
@@ -157,13 +159,10 @@ def find_icd_matches(text, top_n=3, threshold=75):
 #  Main pipeline function 
 
 def run_fuzzy_matching(entities, threshold=75):
-    # Stage 4: assign ICD codes to all entities that don't have one yet.
-    # Per entity: skip if already coded → flag procedures → try Pass A → try Pass B → mark unmatched.
     for ent in entities:
 
         stype = ent.get("suggestion_type", "")
 
-        # 1. Already coded (Z-code inference etc.) 
         if ent.get("icd_code"):
             ent.setdefault("is_ambiguous",     False)
             ent.setdefault("ambiguity_reason", "")
@@ -171,7 +170,6 @@ def run_fuzzy_matching(entities, threshold=75):
             ent.setdefault("alternative_codes", [])
             continue
 
-        # 2. Procedure — PCS codes not in WHO CSV 
         if stype.startswith("procedure_"):
             ent.update({
                 "icd_code":        None,
@@ -183,7 +181,6 @@ def run_fuzzy_matching(entities, threshold=75):
             })
             continue
 
-        # 3. Raw medication without Z-code         
         if stype == "medication":
             ent.update({
                 "icd_code":        None,
@@ -195,7 +192,6 @@ def run_fuzzy_matching(entities, threshold=75):
             })
             continue
 
-        # Determine base confidence from source section
         section_key = (
             ent.get("source_section")
             or ent.get("section_key")
@@ -205,13 +201,12 @@ def run_fuzzy_matching(entities, threshold=75):
 
         extracted = ent.get("extracted_text", "")
 
-        # 4. Pass A — synonym reverse-lookup 
         syn_result = _synonym_lookup(extracted)
         if syn_result:
             code, definition = syn_result
             ent["icd_code"]         = code
             ent["icd_description"]  = definition
-            ent["fuzzy_score"]      = 92          # deterministic — high confidence proxy
+            ent["fuzzy_score"]      = 92
             ent["confidence_score"] = round(base_conf * 0.92, 3)
             ent["is_ambiguous"]     = False
             ent["ambiguity_reason"] = ""
@@ -219,7 +214,6 @@ def run_fuzzy_matching(entities, threshold=75):
             ent["match_method"]     = "synonym_lookup"
             continue
 
-        #5. Pass B — fuzzy matching
         matches = find_icd_matches(extracted, threshold=threshold)
 
         if matches:
@@ -232,7 +226,6 @@ def run_fuzzy_matching(entities, threshold=75):
             ent["alternative_codes"] = matches[1:]
             ent["match_method"]    = "fuzzy"
 
-            # Ambiguity: low score OR very close top-2
             is_ambiguous     = False
             ambiguity_reason = ""
 
@@ -250,7 +243,6 @@ def run_fuzzy_matching(entities, threshold=75):
             ent["ambiguity_reason"] = ambiguity_reason
 
         else:
-            # 6. No match
             ent.update({
                 "icd_code":        None,
                 "confidence_score": None,
@@ -265,11 +257,7 @@ def run_fuzzy_matching(entities, threshold=75):
     return entities
 
 
-#Convenience wrapper
-
 def match_all_from_text(raw_text):
-    # Run the full 4-stage pipeline on a raw discharge summary string.
-    # Returns entities ready for the database (icd_code and confidence_score filled).
     from pipeline      import clean_text, parse_sections, tag_diagnosis_lines
     from abbreviations import expand_sections
     from nlp_extractor import extract_entities, filter_codeable
@@ -288,7 +276,6 @@ def match_all_from_text(raw_text):
     return run_fuzzy_matching(merged)
 
 
-# test across samples
 if __name__ == "__main__":
     import os
     from pipeline      import load_all_samples, clean_text, parse_sections, tag_diagnosis_lines
