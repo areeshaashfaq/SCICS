@@ -27,8 +27,13 @@ _ruler.add_patterns([
     #  Respiratory 
     {"label": "DISEASE", "pattern": "viral pneumonitis"},
     {"label": "DISEASE", "pattern": "viral pneuonitis"},      
-    {"label": "DISEASE", "pattern": "resp b virus"},           
+    {"label": "DISEASE", "pattern": "resp b virus"},
     {"label": "DISEASE", "pattern": "respiratory syncytial virus"},
+    {"label": "DISEASE", "pattern": "covid"},
+    {"label": "DISEASE", "pattern": "covid-19"},
+    {"label": "DISEASE", "pattern": "covid pcr"},
+    {"label": "DISEASE", "pattern": "sars-cov-2"},
+    {"label": "DISEASE", "pattern": "coronavirus"},
     {"label": "DISEASE", "pattern": "bronchiectasis"},
     {"label": "DISEASE", "pattern": "bronchiectatic lung"},
     {"label": "DISEASE", "pattern": "ground glass"},         
@@ -463,107 +468,62 @@ def filter_codeable(entities):
 
 # All codes from the Excel, grouped by file stem.
 # Codes marked NOT_IN_TEXT are genuinely uncatchable by NLP (clinical inference, external cause codes, prior surgery).
+# Revised charter from SIUT — tuple: (code, ctype, description, role)
+# role = "Principal" or "Associate"
 GROUND_TRUTH = {
     "051904": [
-        ("30233N1", "Procedure", "TRANSFUSION OF NONAUTOLOGOUS RED BLOOD CELLS"),
-        ("D56.3",   "Diagnose",  "THALASSEMIA MINOR"),
-        ("E11.9",   "Diagnose",  "TYPE 2 DIABETES MELLITUS"),
-        ("K27.9",   "Diagnose",  "PEPTIC ULCER"),
+        ("30233N1", "Procedure", "TRANSFUSION OF NONAUTOLOGOUS RED BLOOD CELLS INTO PERIPHERAL VEIN; PERCUTANEOUS APPROACH", "Principal"),
+        ("D56.3",   "Diagnose",  "THALASSEMIA MINOR", "Associate"),
+        ("E11.9",   "Diagnose",  "TYPE 2 DIABETES MELLITUS WITHOUT COMPLICATIONS", "Associate"),
+        ("K27.9",   "Diagnose",  "PEPTIC ULC, SITE UNSP, UNSP AS AC OR CHR, W/O HEMOR OR PERF", "Principal"),
     ],
     "490434": [
-        ("I10",      "Diagnose",  "HYPERTENSION"),
-        ("I27.21",   "Diagnose",  "SECONDARY PULMONARY ARTERIAL HYPERTENSION"),
-        ("I51.7",    "Diagnose",  "CARDIOMEGALY"),
-        ("J12.1",    "Diagnose",  "RSV PNEUMONIA"),
-        ("J81.1",    "Diagnose",  "CHRONIC PULMONARY EDEMA"),
-        ("J84.89",   "Diagnose",  "INTERSTITIAL PULMONARY DISEASES"),
-        ("N17.9",    "Diagnose",  "ACUTE KIDNEY FAILURE"),          # NOT_IN_TEXT
-        ("Z20.822",  "Diagnose",  "CONTACT WITH COVID-19"),
-        ("R19.09",   "Diagnose",  "INTRA-ABDOMINAL SWELLING"),
+        ("I27.21",   "Diagnose",  "SECONDARY PULMONARY ARTERIAL HYPERTENSION", "Associate"),
+        ("I51.7",    "Diagnose",  "CARDIOMEGALY", "Associate"),
+        ("J12.1",    "Diagnose",  "RESPIRATORY SYNCYTIAL VIRUS PNEUMONIA", "Principal"),
+        ("R19.09",   "Diagnose",  "OTHER INTRA-ABDOMINAL AND PELVIC SWELLING, MASS AND LUMP", "Associate"),
+        ("Z20.822",  "Diagnose",  "CONTACT WITH AND EXPOSURE (SUSPECTED) COVID-19", "Associate"),
     ],
     "523037": [
-        ("C64.1",   "Diagnose",  "MALIGNANT NEOPLASM OF RIGHT KIDNEY"),
-        ("E11.9",   "Diagnose",  "TYPE 2 DIABETES MELLITUS"),
-        ("Z79.4",   "Diagnose",  "LONG TERM USE OF INSULIN"),
-        ("Z90.5",   "Diagnose",  "ACQUIRED ABSENCE OF KIDNEY"),    
+        ("C64.1",   "Diagnose",  "MALIGNANT NEOPLASM OF RIGHT KIDNEY, EXCEPT RENAL PELVIS", "Principal"),
+        ("E11.9",   "Diagnose",  "TYPE 2 DIABETES MELLITUS WITHOUT COMPLICATIONS", "Associate"),
+        ("Z79.4",   "Diagnose",  "LONG TERM (CURRENT) USE OF INSULIN", "Associate"),
     ],
     "618013": [
-        ("D64.9",   "Diagnose",  "ANEMIA UNSPECIFIED", "MANUAL"),  
-        ("J13",     "Diagnose",  "PNEUMONIA DUE TO STREPTOCOCCUS PNEUMONIAE"),
-        ("J47.1",   "Diagnose",  "BRONCHIECTASIS WITH ACUTE EXACERBATION","MANUAL"),  
-        ("N05.2",   "Diagnose",  "NEPHRITIC SYNDROME WITH MEMBRANOUS GLOMERULONEPHRITIS"),
+        ("J13.",    "Diagnose",  "PNEUMONIA DUE TO STREPTOCOCCUS PNEUMONIAE", "Principal"),
+        ("J47.1",   "Diagnose",  "BRONCHIECTASIS WITH (ACUTE) EXACERBATION", "Associate"),
+        ("N05.2",   "Diagnose",  "UNSP NEPHRITIC SYNDROME W DIFFUSE MEMBRANOUS GLOMRLNEPH", "Associate"),
     ],
     "679242": [
-        ("009U3ZX", "Procedure", "CEREBROSPINAL FLUID BIOPSY"),     
-        ("0HBMXZX", "Procedure", "EXCISION OF RIGHT FOOT SKIN"),   
-        ("D64.9",   "Diagnose",  "ANEMIA UNSPECIFIED"),
-        ("D69.6",   "Diagnose",  "THROMBOCYTOPENIA"),              
-        ("G36.0",   "Diagnose",  "NEUROMYELITIS OPTICA"),
-        ("G37.81",  "Diagnose",  "MOG ANTIBODY DISEASE"),           
-        ("H53.8",   "Diagnose",  "VISUAL DISTURBANCES"),
-        ("K80.20",  "Diagnose",  "CALCULUS OF GALLBLADDER"),       
-        ("L03.115", "Diagnose",  "CELLULITIS OF RIGHT LOWER LIMB"),
-        ("R19.7",   "Diagnose",  "DIARRHEA"),                       
-        ("T25.021A","Diagnose",  "BURN OF RIGHT FOOT"),            
-        ("X17.XXXA","Diagnose",  "CONTACT WITH HOT ENGINES"),      
-        ("Y92.9",   "Diagnose",  "UNSPECIFIED PLACE"),             
+        ("009U3ZX", "Procedure", "CEREBROSPINAL FLUID BIOPSY DIAGNOSTIC", "Principal"),
+        ("G36.0",   "Diagnose",  "NEUROMYELITIS OPTICA [DEVIC]", "Associate"),
+        ("H53.8",   "Diagnose",  "OTHER VISUAL DISTURBANCES", "Associate"),
     ],
     "734696": [
-        ("0W993ZX", "Procedure", "RIGHT PLEURAL TAP"),
-        ("0DB78ZX", "Procedure", "BIOPSY OF ANTRUM ENDOSCOPIC"),
-        ("0DB98ZX", "Procedure", "DUODENAL BIOPSY ENDOSCOPIC"),
-        ("0DBB8ZX", "Procedure", "EXCISION OF ILEUM ENDOSCOPIC"),
-        ("0DBH8ZX", "Procedure", "EXCISION OF CECUM ENDOSCOPIC"),
-        ("A07.1",   "Diagnose",  "GIARDIASIS"),
-        ("B74.9",   "Diagnose",  "FILARIASIS"),                     
-        ("D64.9",   "Diagnose",  "ANEMIA UNSPECIFIED"),
-        ("D72.10",  "Diagnose",  "EOSINOPHILIA"),                  
-        ("D82.4",   "Diagnose",  "HYPERIMMUNOGLOBULIN E SYNDROME"),
-        ("J18.1",   "Diagnose",  "LOBAR PNEUMONIA"),
-        ("J86.9",   "Diagnose",  "PYOTHORAX / EMPYEMA"),
-        ("K29.50",  "Diagnose",  "CHRONIC GASTRITIS"),
-        ("K31.89",  "Diagnose",  "OTHER STOMACH/DUODENUM DISEASE"),
-        ("K36",     "Diagnose",  "OTHER APPENDICITIS"),
-        ("K52.9",   "Diagnose",  "GASTROENTERITIS"),
-        ("K90.49",  "Diagnose",  "MALABSORPTION"),
-        ("N43.3",   "Diagnose",  "HYDROCELE"),                      
-        ("N50.89",  "Diagnose",  "MALE GENITAL DISORDER"),          
-        ("R18.8",   "Diagnose",  "ASCITES"),
+        ("0W993ZX", "Procedure", "RIGHT PLEURAL TAP (PERCUTANEOUS)", "Associate"),
+        ("0DB78ZX", "Procedure", "BIOPSY OF ANTRUM; ENDOSCOPIC; DIAGNOSTIC", "Principal"),
+        ("0DB98ZX", "Procedure", "DUODENAL BIOPSY; ENDOSCOPIC; DIAGNOSTIC", "Associate"),
+        ("0DBB8ZX", "Procedure", "EXCISION OF ILEUM; ENDOSCOPIC; DIAGNOSTIC", "Associate"),
+        ("0DBH8ZX", "Procedure", "EXCISION OF CECUM; ENDOSCOPIC; DIAGNOSTIC", "Associate"),
+        ("A07.1",   "Diagnose",  "GIARDIASIS [LAMBLIASIS]", "Associate"),
+        ("D64.9",   "Diagnose",  "ANEMIA, UNSPECIFIED", "Associate"),
+        ("K52.9",   "Diagnose",  "NONINFECTIVE GASTROENTERITIS AND COLITIS, UNSPECIFIED", "Associate"),
     ],
     "736411": [
-        ("0B9C8ZX", "Procedure", "BRONCHOALVEOLAR LAVAGE"),
-        ("0B9J8ZX", "Procedure", "DRAINAGE OF LEFT LOWER LUNG LOBE"),
-        ("M31.30",  "Diagnose",  "WEGENER GRANULOMATOSIS"),
-        ("N39.0",   "Diagnose",  "URINARY TRACT INFECTION"),
-        ("K59.00",  "Diagnose",  "CONSTIPATION"),                   
-        ("L98.499", "Diagnose",  "NON-PRESSURE CHRONIC SKIN ULCER"),
+        ("0B9C8ZX", "Procedure", "BRONCHOALVEOLAR LAVAGE; DIAGNOSTIC", "Principal"),
+        ("0B9J8ZX", "Procedure", "DRAINAGE OF LEFT LOWER LUNG LOBE; ENDOSCOPIC; DIAGNOSTIC", "Associate"),
+        ("M31.30",  "Diagnose",  "WEGENER GRANULOMATOSIS WITHOUT RENAL INVOLVEMENT", "Principal"),
     ],
     "736804": [
-        ("0DB78ZX", "Procedure", "BIOPSY OF ANTRUM ENDOSCOPIC"),
-        ("0DB98ZX", "Procedure", "DUODENAL BIOPSY ENDOSCOPIC"),
-        ("D50.9",   "Diagnose",  "IRON DEFICIENCY ANEMIA"),
-        ("K29.50",  "Diagnose",  "CHRONIC GASTRITIS"),
-        ("K60.2",   "Diagnose",  "ANAL FISSURE"),
-        ("K64.4",   "Diagnose",  "RESIDUAL HEMORRHOIDAL SKIN TAGS"),
-        ("K90.1",   "Diagnose",  "TROPICAL SPRUE"),                 
-        ("R75",     "Diagnose",  "HIV INCONCLUSIVE"),               
-        ("T39.395A","Diagnose",  "ADVERSE EFFECT OF NSAIDS"),       
-        ("Z90.710", "Diagnose",  "ACQUIRED ABSENCE OF CERVIX/UTERUS"), 
+        ("D50.9",   "Diagnose",  "IRON DEFICIENCY ANEMIA, UNSPECIFIED", "Associate"),
+        ("K31.89",  "Diagnose",  "OTHER DISEASES OF STOMACH AND DUODENUM", "Associate"),
+        ("K60.2",   "Diagnose",  "ANAL FISSURE, UNSPECIFIED", "Associate"),
     ],
 }
 
-# Codes that require clinical inference or are genuinely not in any text — pipeline can never suggest these; coder fills manually.
-_MANUAL_ONLY = {
-    "009U3ZX", "0HBMXZX", # 679242: implied procedures
-    "Z90.5", "Z90.49", "Z90.710",   # surgical absence history
-    "T25.021A", "X17.XXXA", "Y92.9",# external cause codes
-    "D69.6", "K80.20", "R19.7",     # 679242: not in text
-    "B74.9", "D72.10", "D82.4",     # 734696: lab/clinical inference
-    "N43.3", "N50.89",              # 734696: physical exam only
-    "K59.00", "L98.499", "N39.0",   # 736411: not in text (UCE = followup test, not written dx)
-    "K64.4",                        # 736804: perianal skin tag = physical exam only, not documented in text
-    "K90.1", "R75", "T39.395A",     # 736804: history/lab
-}
+# Revised charter no longer includes most of the old "manual-only" codes.
+# Left here for backward compat with any code that imports the set.
+_MANUAL_ONLY = set()
 
 
 def _code_matches_extracted(code, description, codeable):
