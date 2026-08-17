@@ -1,0 +1,111 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from database import get_db
+
+router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+@router.get("/")
+def get_analytics(db: Session = Depends(get_db)):
+
+    # Corrections counts
+    corr = db.execute(text("""
+        SELECT
+            COUNT(*) FILTER (WHERE correction_type = 'accept') AS accepted,
+            COUNT(*) FILTER (WHERE correction_type = 'reject') AS rejected,
+            COUNT(*) FILTER (WHERE correction_type = 'edit')   AS edited
+        FROM corrections
+    """)).fetchone()
+
+    accepted = corr.accepted or 0
+    rejected = corr.rejected or 0
+    edited   = corr.edited   or 0
+    total_decisions = accepted + rejected + edited
+    acceptance_rate = round(accepted / total_decisions, 2) if total_decisions > 0 else 0.0
+
+    # Avg confidence
+    avg_conf = db.execute(text("""
+        SELECT ROUND(AVG(confidence_score)::numeric, 2) FROM suggestions
+        WHERE confidence_score IS NOT NULL
+    """)).scalar() or 0.0
+
+    # Documents
+    docs = db.execute(text("""
+        SELECT
+            COUNT(*)                                        AS total_documents,
+            COUNT(*) FILTER (WHERE status = 'complete')    AS complete_documents,
+            COUNT(*) FILTER (WHERE status != 'complete')   AS pending_documents
+        FROM documents
+    """)).fetchone()
+
+    # Suggestions
+    sugg = db.execute(text("""
+        SELECT
+            COUNT(*)                                    AS total_suggestions,
+            COUNT(*) FILTER (WHERE is_ambiguous = true) AS flagged_ambiguous
+        FROM suggestions
+    """)).fetchone()
+
+    # Top 5 corrected codes
+    top_codes = db.execute(text("""
+        SELECT
+            c.corrected_icd_code        AS icd_code,
+            i.description               AS description,
+            COUNT(*)                    AS corrections
+        FROM corrections c
+        LEFT JOIN icd_codes i ON i.icd_code = c.corrected_icd_code
+        WHERE c.corrected_icd_code IS NOT NULL
+        GROUP BY c.corrected_icd_code, i.description
+        ORDER BY corrections DESC
+        LIMIT 5
+    """)).fetchall()
+
+    # Recent activity
+    recent = db.execute(text("""
+        SELECT
+            c.correction_type,
+            c.corrected_icd_code        AS icd_code,
+            i.description               AS description,
+            c.coder_name,
+            c.corrected_at,
+            d.patient_ref
+        FROM corrections c
+        LEFT JOIN suggestions s  ON s.suggestion_id = c.suggestion_id
+        LEFT JOIN documents d    ON d.document_id   = c.document_id
+        LEFT JOIN icd_codes i    ON i.icd_code      = c.corrected_icd_code
+        ORDER BY c.corrected_at DESC
+        LIMIT 10
+    """)).fetchall()
+
+    return {
+        "accepted":           int(accepted),
+        "rejected":           int(rejected),
+        "edited":             int(edited),
+        "total_decisions":    int(total_decisions),
+        "acceptance_rate":    float(acceptance_rate),
+        "avg_confidence":     float(avg_conf),
+        "total_documents":    int(docs.total_documents),
+        "complete_documents": int(docs.complete_documents),
+        "pending_documents":  int(docs.pending_documents),
+        "total_suggestions":  int(sugg.total_suggestions),
+        "flagged_ambiguous":  int(sugg.flagged_ambiguous),
+        "top_corrected_codes": [
+            {
+                "icd_code":    row.icd_code,
+                "description": row.description,
+                "corrections": int(row.corrections)
+            }
+            for row in top_codes
+        ],
+        "recent_activity": [
+            {
+                "correction_type": row.correction_type,
+                "icd_code":        row.icd_code,
+                "description":     row.description,
+                "coder_name":      row.coder_name,
+                "corrected_at":    row.corrected_at.isoformat() if row.corrected_at else None,
+                "patient_ref":     row.patient_ref
+            }
+            for row in recent
+        ]
+    }

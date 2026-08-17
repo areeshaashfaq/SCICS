@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+psycopg2-binary
+sqlalchemy
+alembic
+pydantic
+python-dotenv
+medspacy
+rapidfuzz
+openpyxl
+pandas
+scispacy
+python-multipart
+python-jose[cryptography]
+bcrypt
+pull
