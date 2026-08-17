@@ -13,7 +13,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 SECRET_KEY = "khidmat_secret_key_2026"
 ALGORITHM = "HS256"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
 
 class LoginRequest(BaseModel):
     username: str
