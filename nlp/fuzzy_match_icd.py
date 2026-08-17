@@ -9,6 +9,17 @@ import re
 import pandas as pd
 from rapidfuzz import process, fuzz
 
+# Optional DB imports for the corrections feedback loop.
+# If psycopg2/dotenv aren't installed the pipeline still works — just no
+# learned synonyms will be loaded.
+try:
+    import psycopg2
+    from dotenv import load_dotenv
+    load_dotenv()
+    _DB_AVAILABLE = True
+except ImportError:
+    _DB_AVAILABLE = False
+
 
 # Load SIUT Diagnosis CSV (ICD-10-CM, 92K codes) — replaces WHO 2019 CSV
 
@@ -71,6 +82,39 @@ def _build_reverse_synonym_map():
 
 
 _SYNONYM_REVERSE = _build_reverse_synonym_map()
+
+
+# CORRECTIONS FEEDBACK LOOP
+# Loads coder-verified phrase→code mappings from the learned_synonyms table
+# (populated by retrain.py from the corrections table). Coder-verified
+# mappings override hand-crafted synonyms because they reflect real usage.
+def _load_learned_synonyms():
+    if not _DB_AVAILABLE:
+        return {}
+    try:
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            return {}
+        conn = psycopg2.connect(db_url + "?sslmode=require")
+        cur  = conn.cursor()
+        cur.execute("SELECT phrase, icd_code FROM learned_synonyms")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        code_to_def = dict(zip(_icd_codes, _icd_definitions))
+        return {
+            phrase.lower().strip(): (code, code_to_def.get(code, code))
+            for phrase, code in rows
+        }
+    except Exception as e:
+        print(f"[NLP] Could not load learned synonyms: {e}")
+        return {}
+
+
+_LEARNED_SYNONYMS = _load_learned_synonyms()
+_SYNONYM_REVERSE.update(_LEARNED_SYNONYMS)   # coder-verified beats hand-crafted
+if _LEARNED_SYNONYMS:
+    print(f"[NLP] Loaded {len(_LEARNED_SYNONYMS)} learned synonyms from corrections")
 
 
 # Procedure synonym reverse-lookup: phrase → (pcs_code, definition)
@@ -574,14 +618,16 @@ def run_fuzzy_matching(entities, threshold=78):
         syn_result = _synonym_lookup(extracted)
         if syn_result:
             code, definition = syn_result
+            # Distinguish coder-learned from hand-crafted for feedback-loop analytics
+            is_learned = extracted.lower().strip() in _LEARNED_SYNONYMS
             ent["icd_code"]         = code
             ent["icd_description"]  = definition
-            ent["fuzzy_score"]      = 92          # deterministic — high confidence proxy
-            ent["confidence_score"] = round(base_conf * 0.92, 3)
+            ent["fuzzy_score"]      = 95 if is_learned else 92    # coder-verified = higher
+            ent["confidence_score"] = round(base_conf * (0.95 if is_learned else 0.92), 3)
             ent["is_ambiguous"]     = False
             ent["ambiguity_reason"] = ""
             ent["alternative_codes"] = []
-            ent["match_method"]     = "synonym_lookup"
+            ent["match_method"]     = "learned_synonym" if is_learned else "synonym_lookup"
             continue
 
         #5. Pass B — fuzzy matching
