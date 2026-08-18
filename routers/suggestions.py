@@ -9,8 +9,11 @@ router = APIRouter(prefix="/suggestions", tags=["suggestions"])
 @router.get("/documents/{document_id}")
 def get_suggestions(document_id: int, db: Session = Depends(get_db)):
     result = db.execute(text("""
-        SELECT * FROM suggestions WHERE document_id = :document_id
-        ORDER BY suggestion_type, confidence_score DESC
+        SELECT s.*, i.description as icd_description
+        FROM suggestions s
+        LEFT JOIN icd_codes i ON i.icd_code = s.icd_code
+        WHERE s.document_id = :document_id
+        ORDER BY s.suggestion_type, s.confidence_score DESC
     """), {"document_id": document_id})
     rows = result.fetchall()
     return {"suggestions": [dict(row._mapping) for row in rows]}
