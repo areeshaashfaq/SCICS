@@ -53,11 +53,10 @@ def send_message(document_id: int, sender: str, message_text: str,
         # Generate response
         answer = generate_response(message_text, suggestions, raw_text)
 
-        # Save bot reply
         db.execute(text("""
-            INSERT INTO chat_messages (document_id, sender, message_text)
-            VALUES (:document_id, 'bot', :message_text)
-        """), {"document_id": document_id, "message_text": answer})
+    INSERT INTO chat_messages (document_id, sender, message_text)
+    VALUES (:document_id, 'assistant', :message_text)
+"""), {"document_id": document_id, "message_text": answer})
         db.commit()
 
         return {"message": "Message saved", "answer": answer}
