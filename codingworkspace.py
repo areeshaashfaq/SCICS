@@ -11,7 +11,8 @@ from PyQt6.QtGui import QFont
 CATEGORY_MAP = {
     "diagnosis_principal":   "Principal Diagnosis",
     "diagnosis_associative": "Associative Diagnoses",
-    "procedure":             "Procedures",
+    "procedure_principal":   "Procedures",
+    "procedure_associative": "Procedures",
     "medication":            "Medications",
 }
 
