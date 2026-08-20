@@ -190,7 +190,7 @@ class LoginWindow(QMainWindow):
 
         lay.addSpacing(20)
 
-        hint = QLabel("demo  ·  coder: fatimah / coder123    admin: admin / admin123")
+        hint = QLabel("demo  ·  coder: coder / Siut2026    admin: admin / Siut2026")
         hint.setFont(QFont("Segoe UI", 8))
         hint.setStyleSheet(f"color:{BORDER}; background:transparent;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
