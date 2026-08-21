@@ -2,8 +2,8 @@
 import requests
 import fake_data
 
-USE_FAKE = True          # flip to False when real backend is ready
-BASE_URL = "http://localhost:8000"
+USE_FAKE = False
+BASE_URL = "https://scics-production.up.railway.app"
 
 
 def get_documents():
@@ -78,8 +78,7 @@ def send_chat(document_id: int, message: str):
         timeout=15,
     )
     r.raise_for_status()
-    # real backend just saves the message — no AI answer returned
-    return {"answer": None}
+    return r.json()
 
 
 def login(username: str, password: str):

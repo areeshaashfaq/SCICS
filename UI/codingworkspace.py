@@ -115,6 +115,7 @@ class SuggestionCard(QFrame):
     def __init__(self, item: dict, is_principal: bool = False):
         super().__init__()
         self.item = item
+        self._is_principal = is_principal
         self.setFrameShape(QFrame.Shape.NoFrame)
         border_color = ACCENT if is_principal else BORDER
         self.setStyleSheet(f"""
@@ -185,9 +186,27 @@ class SuggestionCard(QFrame):
         """)
         self.btn_edit.clicked.connect(self._toggle_edit)
 
+        self.btn_undo = QPushButton("↩ Undo")
+        self.btn_undo.setFixedSize(64, 26)
+        self.btn_undo.setVisible(False)
+        self.btn_undo.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: 1px solid {BORDER}; border-radius: 4px;
+                font-size: 10px;
+            }}
+            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+        """)
+        self.btn_undo.clicked.connect(self._undo)
+
+        self._undo_timer = QTimer()
+        self._undo_timer.setSingleShot(True)
+        self._undo_timer.timeout.connect(lambda: self.btn_undo.setVisible(False))
+
         row1.addWidget(self.btn_accept)
         row1.addWidget(self.btn_reject)
         row1.addWidget(self.btn_edit)
+        row1.addWidget(self.btn_undo)
         lay.addLayout(row1)
 
         lay.addWidget(make_label(self.item.get("icd_description", ""), 11, wrap=True))
@@ -266,6 +285,22 @@ class SuggestionCard(QFrame):
 
         lay.addWidget(self.edit_row)
 
+    def _show_undo(self):
+        self.btn_undo.setVisible(True)
+        self._undo_timer.start(5000)
+
+    def _undo(self):
+        self._undo_timer.stop()
+        self._decided = False
+        self.btn_undo.setVisible(False)
+        self.btn_accept.setEnabled(True)
+        self.btn_reject.setEnabled(True)
+        self.btn_edit.setEnabled(True)
+        border = ACCENT if self._is_principal else BORDER
+        self.setStyleSheet(
+            f"SuggestionCard {{ background:{BG_CARD}; border:1px solid {border}; border-radius:8px; }}"
+        )
+
     def _toggle_edit(self):
         if self._decided:
             return
@@ -304,6 +339,7 @@ class SuggestionCard(QFrame):
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
+        self._show_undo()
 
     def _reject(self):
         if self._decided:
@@ -317,6 +353,7 @@ class SuggestionCard(QFrame):
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
+        self._show_undo()
 
 
 class SuggestionsPanel(QWidget):
@@ -698,18 +735,56 @@ class ChatPanel(QWidget):
 
         self.msg_layout.insertWidget(self.msg_layout.count() - 1, wrapper)
 
+    def _add_typing_indicator(self):
+        bubble = QFrame()
+        bubble.setStyleSheet(
+            f"background:#111E2B; border-radius:10px; border-left:2px solid #1E5A3A;"
+        )
+        b_lay = QHBoxLayout(bubble)
+        b_lay.setContentsMargins(12, 8, 12, 8)
+        lbl = QLabel("◈  typing…")
+        lbl.setStyleSheet(f"color:{TEXT_SEC}; font-size:11px; background:transparent;")
+        b_lay.addWidget(lbl)
+
+        wrapper = QWidget()
+        wrapper.setStyleSheet("background:transparent;")
+        w_lay = QHBoxLayout(wrapper)
+        w_lay.setContentsMargins(0, 0, 0, 0)
+        bubble.setMaximumWidth(160)
+        w_lay.addWidget(bubble)
+        w_lay.addStretch()
+
+        self.msg_layout.insertWidget(self.msg_layout.count() - 1, wrapper)
+        self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum())
+        return wrapper
+
     def _send_message(self):
         text = self.input_box.text().strip()
         if not text:
             return
         self._add_bubble("user", text)
         self.input_box.clear()
+        self.input_box.setEnabled(False)
 
-        if self.document_id is not None:
-            response = api_client.send_chat(self.document_id, text)
-            answer = response.get("answer") or response.get("response")
-            if answer:
-                self._add_bubble("system", answer)
+        typing = self._add_typing_indicator()
+        QTimer.singleShot(50, lambda: self._do_send(text, typing))
+
+    def _do_send(self, text: str, typing_wrapper):
+        try:
+            answer = None
+            if self.document_id is not None:
+                response = api_client.send_chat(self.document_id, text)
+                answer = response.get("answer") or response.get("response")
+        except Exception as e:
+            answer = f"Error: {e}"
+        finally:
+            typing_wrapper.setParent(None)
+            typing_wrapper.deleteLater()
+            self.input_box.setEnabled(True)
+            self.input_box.setFocus()
+
+        if answer:
+            self._add_bubble("system", answer)
 
         self.scroll.verticalScrollBar().setValue(
             self.scroll.verticalScrollBar().maximum()
