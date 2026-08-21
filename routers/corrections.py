@@ -65,7 +65,7 @@ def get_corrections(db: Session = Depends(get_db)):
 class CorrectionRequest(BaseModel):
     suggestion_id:      int
     corrected_icd_code: str
-    correction_type:    str = "edit"
+    correction_type:    str = "reclassified"
     comment:            str = ""
     coder_name:         str = "coder"
 
