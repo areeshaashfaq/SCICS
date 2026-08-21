@@ -134,14 +134,14 @@ _PROC_SYN_REVERSE = _build_reverse_procedure_map()
 
 def _proc_synonym_lookup(text):
     # Deterministic procedure phrase → PCS code lookup.
-    # Same substring rules as diagnosis lookup — 6-char minimum for substring match.
+    # Same rules as diagnosis lookup — 6-char minimum, whole-word anchored.
     text_lower = text.lower().strip()
     if text_lower in _PROC_SYN_REVERSE:
         return _PROC_SYN_REVERSE[text_lower]
     best_len   = 0
     best_match = None
     for syn, pair in _PROC_SYN_REVERSE.items():
-        if len(syn) >= 6 and syn in text_lower:
+        if len(syn) >= 6 and re.search(r"\b" + re.escape(syn), text_lower):
             if len(syn) > best_len:
                 best_len   = len(syn)
                 best_match = pair
@@ -166,7 +166,7 @@ _DEFAULT_BASE_CONFIDENCE = 0.70
 
 def _synonym_lookup(text):
     # Returns (icd_code, definition) if extracted text matches a known synonym, else None.
-    # First tries exact match, then checks if any synonym is a substring of the text.
+    # First tries exact match, then checks if any synonym appears as a whole word.
     # Minimum synonym length of 4 chars prevents short noise words from matching.
     text_lower = text.lower().strip()
 
@@ -174,16 +174,17 @@ def _synonym_lookup(text):
     if text_lower in _SYNONYM_REVERSE:
         return _SYNONYM_REVERSE[text_lower]
 
-    # Substring match — longest matching synonym wins (avoid "uti" hitting "beautiful")
+    # Whole-word match — longest matching synonym wins (avoid "uti" hitting "beautiful")
     best_syn   = None
     best_len   = 0
     best_match = None
 
-    # 6-char minimum for substring match — 4 was too permissive, caused false
-    # positives like "cyst"→a rare synonym or "pain"→noise. Exact matches still
-    # work for any length.
+    # 6-char minimum — 4 was too permissive, caused false positives like
+    # "cyst"→a rare synonym or "pain"→noise. \b anchors the word start so
+    # "cardia" no longer fires on "cardiac"; suffixes still match. Exact
+    # matches still work for any length.
     for syn, pair in _SYNONYM_REVERSE.items():
-        if len(syn) >= 6 and syn in text_lower:
+        if len(syn) >= 6 and re.search(r"\b" + re.escape(syn), text_lower):
             if len(syn) > best_len:
                 best_syn   = syn
                 best_len   = len(syn)
@@ -208,9 +209,15 @@ def find_icd_matches(text, top_n=3, threshold=75):
     keywords = re.findall(r"[a-z]{4,}", query)
 
     if keywords:
+        # Whole-word matching. Plain substring caused false positives:
+        # "iron" matched "environmental", "all" matched "overall".
+        # \b anchors the word start; suffixes still match ("ulcer" -> "ulcers").
+        _kw_re = re.compile(
+            r"\b(?:" + "|".join(re.escape(k) for k in keywords) + r")"
+        )
         filtered_idx  = [
             i for i, defn in enumerate(_icd_definitions_lower)
-            if any(kw in defn for kw in keywords)
+            if _kw_re.search(defn)
         ]
         filtered_defs = [_icd_definitions_lower[i] for i in filtered_idx]
     else:
@@ -291,8 +298,11 @@ def _fuzzy_match_procedures(text, top_n=3, threshold=75):
     query    = text.lower().strip()
     keywords = re.findall(r"[a-z]{4,}", query)
     if keywords:
+        _kw_re = re.compile(
+            r"\b(?:" + "|".join(re.escape(k) for k in keywords) + r")"
+        )
         filtered_idx = [i for i, d in enumerate(_proc_definitions_lower)
-                        if any(kw in d for kw in keywords)]
+                        if _kw_re.search(d)]
         filtered_defs = [_proc_definitions_lower[i] for i in filtered_idx]
     else:
         filtered_idx  = list(range(len(_proc_definitions_lower)))
