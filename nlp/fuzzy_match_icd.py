@@ -9,6 +9,9 @@ import re
 import pandas as pd
 from rapidfuzz import process, fuzz
 
+from text_filters import shares_content_word
+from proc_matcher  import match_procedure_codes
+
 # Optional DB imports for the corrections feedback loop.
 # If psycopg2/dotenv aren't installed the pipeline still works — just no
 # learned synonyms will be loaded.
@@ -242,6 +245,11 @@ def find_icd_matches(text, top_n=3, threshold=75):
     matches = []
     for _matched_lower, score, local_idx in results:
         global_idx = filtered_idx[local_idx]
+        # Sanity gate: a high token_sort_ratio can still be nonsense when the
+        # words merely look alike ("ct cap with contrast" -> "Contact with cat").
+        # Require at least one genuinely shared content word.
+        if not shares_content_word(query, _icd_definitions_lower[global_idx]):
+            continue
         matches.append({
             "icd_code":    _icd_codes[global_idx],
             "definition":  _icd_definitions[global_idx],
@@ -350,9 +358,28 @@ _LAT_KEYWORDS = [
 # Set of all known codes for fast membership tests
 _CODE_SET = set(_icd_codes)
 
+# "left"/"right" inside these phrases is anatomy, not laterality.
+# "left ventricular hypertrophy" must not turn I51.7 into I51.2.
+_LAT_ANATOMY_NOT_SIDE = re.compile(
+    r"\b(left|right)[\s-]+(ventric\w*|atri\w*|main|bundle|"
+    r"heart|border|axis|shift|iliac|colon|hemicolon)\b",
+    re.IGNORECASE,
+)
+
 def _refine_laterality(code, phrase):
     # If phrase mentions a side and a sibling code with that side digit exists, swap.
     if not code or not phrase:
+        return code
+    # Guard 1: only swap FROM an explicitly unspecified digit (9). In ICD-10-CM
+    # the laterality position uses 1=right, 2=left, 3=bilateral, 9=unspecified.
+    # Any other final digit already carries meaning, and overwriting it invents
+    # a different diagnosis (I51.7 cardiomegaly -> I51.2, N20.0 kidney calculus
+    # -> N20.1 ureter calculus). 0 is deliberately excluded: in many categories
+    # it encodes a site rather than "unspecified side".
+    if code[-1] != "9":
+        return code
+    # Guard 2: skip fixed anatomical phrases where the side word is not laterality.
+    if _LAT_ANATOMY_NOT_SIDE.search(phrase):
         return code
     phrase_lower = " " + phrase.lower() + " "
     detected_digit = None
@@ -543,9 +570,56 @@ def _dedupe_by_code(entities):
 
 #  Main pipeline function
 
+def _expand_procedure_entities(entities):
+    """Split procedure lines that document more than one procedure.
+
+    A single sentence ("lower gi endoscopy with biopsies from terminal ileum
+    and caecum") is two PCS codes. The rest of the pipeline assigns at most
+    one code per entity, so we clone the entity once per detected code and
+    pre-fill it. Lines yielding nothing are left untouched for the existing
+    synonym / fuzzy passes to handle.
+    """
+    proc_def = dict(zip(_proc_codes, _proc_definitions))
+    out = []
+    for ent in entities:
+        stype = ent.get("suggestion_type", "")
+        if not stype.startswith("procedure_") or ent.get("icd_code"):
+            out.append(ent)
+            continue
+
+        hits = match_procedure_codes(ent.get("extracted_text", ""))
+        hits = [(c, e) for c, e in hits if c in _ALL_VALID_CODES]
+        if not hits:
+            out.append(ent)
+            continue
+
+        base = ent.get("base_confidence") or _DEFAULT_BASE_CONFIDENCE
+        for i, (code, evidence) in enumerate(hits):
+            clone = dict(ent)
+            # Only the first procedure on a line can be the principal one.
+            if i > 0 and clone.get("suggestion_type") == "procedure_principal":
+                clone["suggestion_type"] = "procedure_associative"
+            clone["icd_code"]         = code
+            clone["icd_description"]  = proc_def.get(code, code)
+            clone["fuzzy_score"]      = 90
+            clone["confidence_score"] = round(base * 0.90, 3)
+            clone["is_ambiguous"]     = False
+            clone["ambiguity_reason"] = ""
+            clone["alternative_codes"] = []
+            clone["match_method"]     = "proc_composite"
+            clone["source_snippet"]   = (
+                f"{ent.get('source_snippet') or ent.get('extracted_text','')} "
+                f"[matched on: {evidence}]"
+            )
+            out.append(clone)
+    return out
+
+
 def run_fuzzy_matching(entities, threshold=78):
     # Stage 4: assign ICD codes to all entities that don't have one yet.
     # Per entity: skip if already coded → flag procedures → try Pass A → try Pass B → mark unmatched.
+    entities = _expand_procedure_entities(entities)
+
     for ent in entities:
 
         stype = ent.get("suggestion_type", "")
