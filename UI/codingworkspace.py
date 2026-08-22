@@ -293,7 +293,24 @@ class SuggestionCard(QFrame):
         er.addWidget(btn_cancel)
 
         lay.addWidget(self.edit_row)
-
+        # The backend already knows what this coder decided. Without this the
+        # card rebuilds as undecided on every reload and their work looks lost.
+        existing = (self.item.get("coder_decision") or "pending").lower()
+        if existing == "approved":
+            self._apply_decided(SUCCESS)
+        elif existing == "rejected":
+            self._apply_decided(DANGER)
+    def _apply_decided(self, colour):
+        """Show a card as already decided, without re-sending it to the server."""
+        self._decided = True
+        self.setStyleSheet(
+            f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {colour}; border-radius:8px; }}"
+        )
+        self.btn_accept.setEnabled(False)
+        self.btn_reject.setEnabled(False)
+        self.btn_edit.setEnabled(False)
+        self.edit_row.setVisible(False)
+        
     def _show_undo(self):
         self.btn_undo.setVisible(True)
         self._undo_timer.start(5000)
@@ -956,7 +973,7 @@ class CodingWorkspace(QMainWindow):
         box.setStyleSheet(DIALOG_STYLE)
         box.exec()
         self._go_back()
-        
+
     def _go_back(self):
         if self.on_back:
             self.on_back()

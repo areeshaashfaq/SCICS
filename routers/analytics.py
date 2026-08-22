@@ -49,7 +49,7 @@ def get_analytics(db: Session = Depends(get_db)):
     # Top 5 corrected codes
     top_codes = db.execute(text("""
         SELECT
-            c.corrected_icd_code        AS icd_code,
+            COALESCE(c.corrected_icd_code, c.original_icd_code, s.icd_code) AS icd_code,
             i.description               AS description,
             COUNT(*)                    AS corrections
         FROM corrections c
@@ -72,7 +72,7 @@ def get_analytics(db: Session = Depends(get_db)):
         FROM corrections c
         LEFT JOIN suggestions s  ON s.suggestion_id = c.suggestion_id
         LEFT JOIN documents d    ON d.document_id   = c.document_id
-        LEFT JOIN icd_codes i    ON i.icd_code      = c.corrected_icd_code
+        LEFT JOIN icd_codes i    ON i.icd_code      = COALESCE(c.corrected_icd_code, c.original_icd_code, s.icd_code)
         ORDER BY c.corrected_at DESC
         LIMIT 10
     """)).fetchall()
