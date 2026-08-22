@@ -11,10 +11,9 @@ def get_analytics(db: Session = Depends(get_db)):
     # Corrections counts
     corr = db.execute(text("""
         SELECT
-            COUNT(*) FILTER (WHERE correction_type = 'accept') AS accepted,
-            COUNT(*) FILTER (WHERE correction_type = 'reject') AS rejected,
-            COUNT(*) FILTER (WHERE correction_type = 'edit')   AS edited
-        FROM corrections
+            COUNT(*) FILTER (WHERE correction_type = 'confirmed')    AS accepted,
+            COUNT(*) FILTER (WHERE correction_type = 'rejected')     AS rejected,
+            COUNT(*) FILTER (WHERE correction_type = 'reclassified') AS edited
     """)).fetchone()
 
     accepted = corr.accepted or 0
@@ -33,8 +32,8 @@ def get_analytics(db: Session = Depends(get_db)):
     docs = db.execute(text("""
         SELECT
             COUNT(*)                                        AS total_documents,
-            COUNT(*) FILTER (WHERE status = 'complete')    AS complete_documents,
-            COUNT(*) FILTER (WHERE status != 'complete')   AS pending_documents
+            COUNT(*) FILTER (WHERE status IN ('reviewed', 'finalized'))     AS complete_documents,
+            COUNT(*) FILTER (WHERE status NOT IN ('reviewed', 'finalized')) AS pending_documents
         FROM documents
     """)).fetchone()
 

@@ -39,7 +39,7 @@ def _normalise_correction_type(raw: str) -> str:
 @router.patch("/documents/{document_id}/complete")
 def complete_document(document_id: int, db: Session = Depends(get_db)):
     db.execute(text("""
-        UPDATE documents SET status = 'complete'
+        UPDATE documents SET status = 'reviewed'
         WHERE document_id = :document_id
     """), {"document_id": document_id})
     db.commit()
@@ -103,6 +103,17 @@ def post_correction(req: CorrectionRequest, db: Session = Depends(get_db)):
     # Reject bad input with a 400 before it reaches Postgres, so a wrong value
     # returns a readable error instead of an integrity-error 500.
     correction_type = _normalise_correction_type(req.correction_type)
+
+    # A coder can mistype a code. Check it exists before inserting, so they
+    # get "not a valid ICD code" rather than an integrity-error 500.
+    known = db.execute(text("""
+        SELECT 1 FROM icd_codes WHERE icd_code = :code
+    """), {"code": req.corrected_icd_code}).fetchone()
+    if known is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{req.corrected_icd_code}' is not a valid ICD code",
+        )
 
     # Look up original code and document_id
     sugg = db.execute(text("""
