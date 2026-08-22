@@ -1,4 +1,7 @@
+import html
+import re
 import sys
+
 import api_client
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -54,6 +57,74 @@ SECTION_STYLE = {
     "Medications":           {"icon": "●", "fg": "#F0C040", "bg": "#2A2416"},
     "Needs manual coding":   {"icon": "⚠", "fg": "#8FA8BF", "bg": "#161F2A"},
 }
+
+
+def markdown_to_html(text: str) -> str:
+    """Render the small subset of markdown an LLM actually emits.
+
+    The chat bubble is a RichText QLabel, so it understands HTML but not
+    markdown — which is why raw ** and ### were showing up in answers. Rather
+    than forbidding the model from formatting (brittle, and it loses useful
+    emphasis on code names), convert what it sends.
+    """
+    if not text:
+        return ""
+
+    # Escape first so clinical text containing < or & cannot break the markup.
+    out = html.escape(text)
+
+    lines = out.split("\n")
+    rendered = []
+    in_list = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Headings: ### Title -> bold line. Real <h3> would be oversized here.
+        heading = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+        if heading:
+            if in_list:
+                rendered.append("</ul>")
+                in_list = False
+            rendered.append(f"<p><b>{heading.group(2)}</b></p>")
+            continue
+
+        # Bullets: *, - or • at the start of a line.
+        bullet = re.match(r"^[\*\-\u2022]\s+(.*)$", stripped)
+        if bullet:
+            if not in_list:
+                rendered.append("<ul style='margin:2px 0 2px 12px;'>")
+                in_list = True
+            rendered.append(f"<li>{bullet.group(1)}</li>")
+            continue
+
+        if in_list:
+            rendered.append("</ul>")
+            in_list = False
+
+        # Blockquote: > evidence line
+        quote = re.match(r"^&gt;\s*(.*)$", stripped)
+        if quote:
+            rendered.append(
+                f"<p style='margin:2px 0 2px 8px; color:#F0C040;'>{quote.group(1)}</p>"
+            )
+            continue
+
+        if stripped:
+            rendered.append(f"<p style='margin:3px 0;'>{stripped}</p>")
+
+    if in_list:
+        rendered.append("</ul>")
+
+    body = "".join(rendered)
+
+    # Inline styles last, so the markers inside list items and headings are
+    # handled too. Bold before italic: ** would otherwise be eaten by *.
+    body = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", body, flags=re.S)
+    body = re.sub(r"(?<![\w\*])\*(?!\s)(.+?)(?<!\s)\*(?![\w\*])", r"<i>\1</i>", body, flags=re.S)
+    body = re.sub(r"`([^`]+)`", r"<span style='color:#5BB8FF;'>\1</span>", body)
+
+    return body
 
 
 def conf_color(pct: int) -> str:
@@ -706,11 +777,15 @@ class ChatBubble(QFrame):
         line.setFixedHeight(1)
         lay.addWidget(line)
 
-        msg = QLabel(text)
+        # The model replies in markdown; a RichText label speaks HTML, so the
+        # raw ** and ### were being shown literally. Convert instead of asking
+        # the model not to format — emphasis on code names is worth keeping.
+        msg = QLabel(markdown_to_html(text))
         msg.setFont(QFont("Segoe UI", 11))
         msg.setStyleSheet(f"color:{TEXT_PRI}; background:transparent;")
         msg.setWordWrap(True)
         msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(msg)
 
         time_lbl = QLabel(datetime.now().strftime("%H:%M"))
