@@ -315,9 +315,15 @@ class SuggestionCard(QFrame):
         corrected_code = self.edit_input.text().strip()
         if not corrected_code:
             return
+        # Record the correction first. If that fails, do not mark the
+        # suggestion approved, or the correction would be lost silently.
+        correction = api_client.submit_correction(self.item["suggestion_id"], corrected_code)
+        if isinstance(correction, dict) and correction.get("error"):
+            return
+        decision = api_client.submit_decision(self.item["suggestion_id"], "approved")
+        if isinstance(decision, dict) and decision.get("error"):
+            return
         self._decided = True
-        api_client.submit_decision(self.item["suggestion_id"], "approved")
-        api_client.submit_correction(self.item["suggestion_id"], corrected_code)
         self.code_lbl.setText(corrected_code)
         self.edit_row.setVisible(False)
         self.setStyleSheet(
@@ -330,8 +336,12 @@ class SuggestionCard(QFrame):
     def _accept(self):
         if self._decided:
             return
+        result = api_client.submit_decision(self.item["suggestion_id"], "approved")
+        # api_client has already shown the coder a dialog. Leave the card
+        # actionable so nothing looks saved when it wasn't.
+        if isinstance(result, dict) and result.get("error"):
+            return
         self._decided = True
-        api_client.submit_decision(self.item["suggestion_id"], "approved")
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {SUCCESS}; border-radius:8px; }}"
         )
@@ -344,8 +354,10 @@ class SuggestionCard(QFrame):
     def _reject(self):
         if self._decided:
             return
+        result = api_client.submit_decision(self.item["suggestion_id"], "rejected")
+        if isinstance(result, dict) and result.get("error"):
+            return
         self._decided = True
-        api_client.submit_decision(self.item["suggestion_id"], "rejected")
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {DANGER}; border-radius:8px; }}"
         )
@@ -354,7 +366,6 @@ class SuggestionCard(QFrame):
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
         self._show_undo()
-
 
 class SuggestionsPanel(QWidget):
     def __init__(self):
