@@ -9,6 +9,18 @@ from admin_dash import AdminDashboard
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    app.setStyleSheet("""
+        QMessageBox { background: #162230; }
+        QMessageBox QLabel { color: #E8EDF2; font-size: 12px; }
+        QMessageBox QPushButton {
+            background: #1C2D3E; color: #E8EDF2;
+            border: 1px solid #253D52; border-radius: 4px;
+            padding: 5px 18px; min-width: 60px;
+        }
+        QMessageBox QPushButton:hover { border-color: #2E7DD1; color: white; }
+        QInputDialog { background: #162230; }
+        QInputDialog QLabel { color: #E8EDF2; }
+    """)
 
     _active = []   # holds the current main window so it isn't garbage collected
 

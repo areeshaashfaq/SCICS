@@ -33,7 +33,16 @@ TEXT_EVD    = "#F0C040"
 CONF_HI     = "#27AE60"
 CONF_MID    = "#F39C12"
 CONF_LO     = "#C0392B"
-
+DIALOG_STYLE = f"""
+    QMessageBox {{ background: {BG_PANEL}; }}
+    QLabel {{ color: {TEXT_PRI}; font-size: 12px; }}
+    QPushButton {{
+        background: {BG_CARD}; color: {TEXT_PRI};
+        border: 1px solid {BORDER}; border-radius: 4px;
+        padding: 5px 18px; font-size: 11px; min-width: 60px;
+    }}
+    QPushButton:hover {{ border-color: {ACCENT}; color: white; }}
+"""
 def conf_color(pct: int) -> str:
     if pct >= 85:
         return CONF_HI
@@ -445,14 +454,18 @@ class SuggestionsPanel(QWidget):
         self.loading_lbl.setVisible(False)
 
     def _accept_all(self):
-        reply = QMessageBox.question(
-            self, "Accept All",
-            "Accept all suggestions? This cannot be undone.",
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Accept All")
+        box.setText("Accept all suggestions? This cannot be undone.")
+        box.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        if reply == QMessageBox.StandardButton.Yes:
-            for card in self._cards:
-                card._accept()
+        box.setStyleSheet(DIALOG_STYLE)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        for card in self._cards:
+            card._accept()
 
     def accept_current(self):
         if self._cards and self._current_index < len(self._cards):
@@ -930,14 +943,20 @@ class CodingWorkspace(QMainWindow):
     def _submit_review(self):
         self.submit_btn.setEnabled(False)
         self.submit_btn.setText("Submitting…")
-        try:
-            api_client.mark_complete(self.document_id)
-        except Exception:
+        result = api_client.mark_complete(self.document_id)
+        if isinstance(result, dict) and result.get("error"):
             self.submit_btn.setEnabled(True)
             self.submit_btn.setText("Submit Review")
             return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Review Submitted")
+        box.setText("Review submitted. This document is now marked as reviewed.")
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.setStyleSheet(DIALOG_STYLE)
+        box.exec()
         self._go_back()
-
+        
     def _go_back(self):
         if self.on_back:
             self.on_back()
