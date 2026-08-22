@@ -33,6 +33,7 @@ TEXT_EVD    = "#F0C040"
 CONF_HI     = "#27AE60"
 CONF_MID    = "#F39C12"
 CONF_LO     = "#C0392B"
+
 DIALOG_STYLE = f"""
     QMessageBox {{ background: {BG_PANEL}; }}
     QLabel {{ color: {TEXT_PRI}; font-size: 12px; }}
@@ -43,6 +44,18 @@ DIALOG_STYLE = f"""
     }}
     QPushButton:hover {{ border-color: {ACCENT}; color: white; }}
 """
+
+# Each section gets its own icon and accent colour so a coder can tell at a
+# glance which part of the list they are scrolling through.
+SECTION_STYLE = {
+    "Principal Diagnosis":   {"icon": "★", "fg": "#2E7DD1", "bg": "#0D2035"},
+    "Associative Diagnoses": {"icon": "◆", "fg": "#5BB8FF", "bg": "#122536"},
+    "Procedures":            {"icon": "✦", "fg": "#4FC3A1", "bg": "#0F2A26"},
+    "Medications":           {"icon": "●", "fg": "#F0C040", "bg": "#2A2416"},
+    "Needs manual coding":   {"icon": "⚠", "fg": "#8FA8BF", "bg": "#161F2A"},
+}
+
+
 def conf_color(pct: int) -> str:
     if pct >= 85:
         return CONF_HI
@@ -61,6 +74,62 @@ def make_label(text: str, size: int = 12, bold: bool = False,
     if wrap:
         lbl.setWordWrap(True)
     return lbl
+
+
+class SectionHeader(QFrame):
+    """A clickable section bar that expands or collapses the cards beneath it."""
+
+    def __init__(self, title: str, count: int, on_toggle, expanded: bool = True,
+                 style_key: str = None, compact: bool = False):
+        super().__init__()
+        self._expanded = expanded
+        self._on_toggle = on_toggle
+        style = SECTION_STYLE.get(style_key or title,
+                                  SECTION_STYLE["Associative Diagnoses"])
+
+        # Compact headers are the nested "needs manual coding" bars that sit
+        # inside a section, so they read as subordinate to the section title.
+        self.setFixedHeight(28 if compact else 34)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        border = "dashed" if compact else "solid"
+        self.setStyleSheet(
+            f"SectionHeader {{ background:{style['bg']}; border-radius:5px;"
+            f" border:1px {border} {style['fg']}44;"
+            f" border-left:3px solid {style['fg']}; }}"
+            f"SectionHeader:hover {{ background:#1A2836; }}"
+        )
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10 if not compact else 8, 0, 10, 0)
+        lay.setSpacing(8)
+
+        self.arrow = QLabel("▾" if expanded else "▸")
+        self.arrow.setStyleSheet(
+            f"color:{style['fg']}; background:transparent; font-size:10px;"
+        )
+        lay.addWidget(self.arrow)
+
+        title_lbl = QLabel(f"{style['icon']}  {title}")
+        font = QFont("Segoe UI", 10 if compact else 11)
+        font.setBold(not compact)
+        title_lbl.setFont(font)
+        title_lbl.setStyleSheet(f"color:{style['fg']}; background:transparent;")
+        lay.addWidget(title_lbl)
+
+        lay.addStretch()
+
+        badge = QLabel(str(count))
+        badge.setStyleSheet(
+            f"color:{style['fg']}; background:transparent;"
+            f"border:1px solid {style['fg']}; border-radius:9px;"
+            f"padding:0px 7px; font-size:10px; font-weight:bold;"
+        )
+        lay.addWidget(badge)
+
+    def mousePressEvent(self, event):
+        self._expanded = not self._expanded
+        self.arrow.setText("▾" if self._expanded else "▸")
+        self._on_toggle(self._expanded)
 
 
 class DischargeSummaryPanel(QWidget):
@@ -293,6 +362,7 @@ class SuggestionCard(QFrame):
         er.addWidget(btn_cancel)
 
         lay.addWidget(self.edit_row)
+
         # The backend already knows what this coder decided. Without this the
         # card rebuilds as undecided on every reload and their work looks lost.
         existing = (self.item.get("coder_decision") or "pending").lower()
@@ -300,6 +370,7 @@ class SuggestionCard(QFrame):
             self._apply_decided(SUCCESS)
         elif existing == "rejected":
             self._apply_decided(DANGER)
+
     def _apply_decided(self, colour):
         """Show a card as already decided, without re-sending it to the server."""
         self._decided = True
@@ -310,7 +381,7 @@ class SuggestionCard(QFrame):
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
-        
+
     def _show_undo(self):
         self.btn_undo.setVisible(True)
         self._undo_timer.start(5000)
@@ -392,6 +463,7 @@ class SuggestionCard(QFrame):
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
         self._show_undo()
+
 
 class SuggestionsPanel(QWidget):
     def __init__(self):
@@ -529,37 +601,58 @@ class SuggestionsPanel(QWidget):
                 continue
             is_principal_section = (category == "Principal Diagnosis")
 
-            sec_header = QWidget()
-            sec_header.setFixedHeight(30)
-            sec_header.setStyleSheet(
-                f"background: {'#0D2035' if is_principal_section else '#12202E'};"
-                f"border-radius: 5px;"
-            )
-            sh_lay = QHBoxLayout(sec_header)
-            sh_lay.setContentsMargins(10, 0, 10, 0)
-            icon = "★" if is_principal_section else "◆"
-            sh_lay.addWidget(make_label(f"{icon}  {category}", 11, bold=True,
-                                        color=ACCENT if is_principal_section else TEXT_SEC))
-            count_lbl = QLabel(str(len(items)))
-            count_lbl.setStyleSheet(
-                f"color:{TEXT_SEC}; background:{BORDER}; border-radius:9px;"
-                f"padding:0px 7px; font-size:10px;"
-            )
-            sh_lay.addStretch()
-            sh_lay.addWidget(count_lbl)
-            self.cards_layout.insertWidget(insert_pos, sec_header)
-            insert_pos += 1
-            # Coded, high-confidence suggestions first. Uncoded ones are
-            # flags for manual review, not the coder's main work.
-            items.sort(key=lambda s: (
-                s.get("icd_code") is None,
-                -(s.get("confidence_score") or 0),
-            ))
-            for item in items:
+            # Coded suggestions are the coder's actual work. Uncoded ones are
+            # things the pipeline found but could not map — still shown, because
+            # the coder can hit E and code them by hand, but folded into a
+            # sub-drawer inside their own section rather than listed separately.
+            coded   = [s for s in items if s.get("icd_code")]
+            uncoded = [s for s in items if not s.get("icd_code")]
+            coded.sort(key=lambda s: -(s.get("confidence_score") or 0))
+
+            body = QWidget()
+            body.setStyleSheet("background:transparent;")
+            body_lay = QVBoxLayout(body)
+            body_lay.setContentsMargins(0, 0, 0, 0)
+            body_lay.setSpacing(16)
+
+            for item in coded:
                 card = SuggestionCard(item, is_principal=is_principal_section)
                 self._cards.append(card)
-                self.cards_layout.insertWidget(insert_pos, card)
-                insert_pos += 1
+                body_lay.addWidget(card)
+
+            if uncoded:
+                sub_body = self._make_card_holder(uncoded, False, visible=False)
+                sub_header = SectionHeader(
+                    "Needs manual coding", len(uncoded),
+                    on_toggle=lambda shown, b=sub_body: b.setVisible(shown),
+                    expanded=False, style_key="Needs manual coding", compact=True,
+                )
+                body_lay.addWidget(sub_header)
+                body_lay.addWidget(sub_body)
+
+            header = SectionHeader(
+                category, len(items),
+                on_toggle=lambda shown, b=body: b.setVisible(shown),
+                expanded=True, style_key=category,
+            )
+            self.cards_layout.insertWidget(insert_pos, header)
+            insert_pos += 1
+            self.cards_layout.insertWidget(insert_pos, body)
+            insert_pos += 1
+
+    def _make_card_holder(self, items, is_principal, visible):
+        """Wrap a set of cards so the whole group can be shown or hidden at once."""
+        holder = QWidget()
+        holder.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(holder)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(16)
+        for item in items:
+            card = SuggestionCard(item, is_principal=is_principal)
+            self._cards.append(card)
+            lay.addWidget(card)
+        holder.setVisible(visible)
+        return holder
 
 
 class ChatBubble(QFrame):
@@ -965,6 +1058,8 @@ class CodingWorkspace(QMainWindow):
     def _submit_review(self):
         self.submit_btn.setEnabled(False)
         self.submit_btn.setText("Submitting…")
+        # api_client no longer raises, so the old except branch never ran and
+        # the button stayed on "Submitting..." forever after a failure.
         result = api_client.mark_complete(self.document_id)
         if isinstance(result, dict) and result.get("error"):
             self.submit_btn.setEnabled(True)
