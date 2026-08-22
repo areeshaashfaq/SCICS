@@ -10,6 +10,25 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet("""
+        QMessageBox, QInputDialog { background: #162230; }
+        QMessageBox QLabel, QInputDialog QLabel {
+            color: #E8EDF2; font-size: 12px;
+        }
+        QInputDialog QLineEdit {
+            background: #0A1520; color: #E8EDF2;
+            border: 1px solid #253D52; border-radius: 4px;
+            padding: 4px 8px; min-height: 22px;
+        }
+        QMessageBox QPushButton, QInputDialog QPushButton {
+            background: #1C2D3E; color: #E8EDF2;
+            border: 1px solid #253D52; border-radius: 4px;
+            padding: 5px 18px; min-width: 60px;
+        }
+        QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {
+            border-color: #2E7DD1; color: white;
+        }
+    """)
+    app.setStyleSheet("""
         QMessageBox { background: #162230; }
         QMessageBox QLabel { color: #E8EDF2; font-size: 12px; }
         QMessageBox QPushButton {

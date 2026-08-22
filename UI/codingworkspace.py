@@ -549,7 +549,12 @@ class SuggestionsPanel(QWidget):
             sh_lay.addWidget(count_lbl)
             self.cards_layout.insertWidget(insert_pos, sec_header)
             insert_pos += 1
-
+            # Coded, high-confidence suggestions first. Uncoded ones are
+            # flags for manual review, not the coder's main work.
+            items.sort(key=lambda s: (
+                s.get("icd_code") is None,
+                -(s.get("confidence_score") or 0),
+            ))
             for item in items:
                 card = SuggestionCard(item, is_principal=is_principal_section)
                 self._cards.append(card)

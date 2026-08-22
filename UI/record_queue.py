@@ -300,23 +300,28 @@ class RecordQueueWindow(QMainWindow):
         self._render_page()
 
     def _on_search(self, text: str):
-        if not text:
-            self._filtered_docs = self._all_docs
-        else:
-            text = text.lower()
-            self._filtered_docs = [
-                d for d in self._all_docs
-                if text in d.get("patient_ref", "").lower()
-                or text in d.get("source_filename", "").lower()
-            ]
-        self._current_page = 0
-        self._render_page()
+        self._apply_filters()
 
     def _filter_by_status(self, status: str):
-        if status == "all":
-            self._filtered_docs = self._all_docs
-        else:
-            self._filtered_docs = [d for d in self._all_docs if d.get("status") == status]
+        self._status_filter = status
+        self._apply_filters()
+
+    def _apply_filters(self):
+        query = self.search_input.text().strip().lower()
+        docs = self._all_docs
+
+        status = getattr(self, "_status_filter", "all")
+        if status != "all":
+            docs = [d for d in docs if d.get("status") == status]
+
+        if query:
+            docs = [
+                d for d in docs
+                if query in str(d.get("patient_ref", "")).lower()
+                or query in str(d.get("source_filename", "")).lower()
+            ]
+
+        self._filtered_docs = docs
         self._current_page = 0
         self._render_page()
 

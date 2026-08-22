@@ -1,6 +1,6 @@
 # api_client.py
 import functools
-
+import os
 import requests
 
 import fake_data
@@ -201,7 +201,7 @@ def upload_document(filepath: str, patient_ref: str = ""):
     with open(filepath, "rb") as f:
         r = requests.post(
             f"{BASE_URL}/documents/",
-            files={"file": (filepath, f, "text/plain")},
+            files={"file": (os.path.basename(filepath), f, "text/plain")},
             params={"patient_ref": patient_ref},
             timeout=120,   # NLP pipeline takes time
         )

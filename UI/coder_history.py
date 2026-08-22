@@ -37,8 +37,8 @@ def make_label(text, size=12, bold=False, color=TEXT_PRI, wrap=False):
 
 # ── single correction detail row ──────────────────────────────────────────────
 class CorrectionDetailRow(QFrame):
-    ICONS = {"accept": "✓", "reject": "✗", "edit": "✎"}
-    COLORS = {"accept": SUCCESS, "reject": DANGER, "edit": WARNING}
+    ICONS = {"confirmed": "✓", "rejected": "✗", "reclassified": "✎"}
+    COLORS = {"confirmed": SUCCESS, "rejected": DANGER, "reclassified": WARNING}
 
     def __init__(self, corr: dict):
         super().__init__()
@@ -57,7 +57,7 @@ class CorrectionDetailRow(QFrame):
         lay.setContentsMargins(48, 0, 18, 0)
         lay.setSpacing(14)
 
-        ctype  = corr.get("correction_type", "accept")
+        ctype  = corr.get("correction_type", "confirmed")
         color  = self.COLORS.get(ctype, TEXT_SEC)
         icon   = self.ICONS.get(ctype, "·")
 
@@ -151,9 +151,9 @@ class DocumentHistoryRow(QFrame):
         hlay.addSpacing(8)
 
         # stats chips
-        n_accept = sum(1 for c in self.corrections if c.get("correction_type") == "accept")
-        n_reject = sum(1 for c in self.corrections if c.get("correction_type") == "reject")
-        n_edit   = sum(1 for c in self.corrections if c.get("correction_type") == "edit")
+        n_accept = sum(1 for c in self.corrections if c.get("correction_type") == "confirmed")
+        n_reject = sum(1 for c in self.corrections if c.get("correction_type") == "rejected")
+        n_edit   = sum(1 for c in self.corrections if c.get("correction_type") == "reclassified")
 
         for label, count, color in [
             (f"✓ {n_accept} accepted", n_accept, SUCCESS),
@@ -349,9 +349,9 @@ class CoderHistoryWindow(QMainWindow):
 
         n_docs   = len(by_doc)
         n_total  = len(corrections)
-        n_accept = sum(1 for c in corrections if c.get("correction_type") == "accept")
-        n_reject = sum(1 for c in corrections if c.get("correction_type") == "reject")
-        n_edit   = sum(1 for c in corrections if c.get("correction_type") == "edit")
+        n_accept = sum(1 for c in corrections if c.get("correction_type") == "confirmed")
+        n_reject = sum(1 for c in corrections if c.get("correction_type") == "rejected")
+        n_edit   = sum(1 for c in corrections if c.get("correction_type") == "reclassified")
         self.summary_lbl.setText(
             f"{n_docs} document{'s' if n_docs != 1 else ''}  ·  "
             f"{n_total} decisions  ·  "
