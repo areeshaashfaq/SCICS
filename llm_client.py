@@ -47,7 +47,7 @@ OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 # Enough for a coder's question; keeps latency and token use down.
-MAX_OUTPUT_TOKENS = 400
+MAX_OUTPUT_TOKENS = 2048
 
 # A clinical tool must not invent codes. The model may explain and summarise,
 # but producing the code list is the database's job, not the model's.
