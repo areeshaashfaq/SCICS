@@ -3,6 +3,7 @@ import subprocess
 import requests
 from rapidfuzz import fuzz
 import os
+from llm_client import ask_llm
 
 OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = "llama3.2"
@@ -235,11 +236,11 @@ def generate_response(message: str, suggestions: list, raw_text: str = "") -> st
     if intent == "ask_meds":       return _ask_meds(suggestions)
     if intent == "ask_all":        return _ask_all(suggestions)
 
-    # Fall back to Ollama for anything the rule-based system can't handle
-    print("Falling back to Ollama...")
-    ollama_answer = _ask_ollama(message, suggestions, raw_text)
-    if ollama_answer:
-        return ollama_answer
+    # Gemini first (works on Railway), Ollama second (local only).
+    print("Falling back to LLM...")
+    llm_answer = ask_llm(message, suggestions, raw_text)
+    if llm_answer:
+        return llm_answer
     return _unknown()
     # Fall back to Ollama for anything the rule-based system can't handle
     print("Falling back to Ollama...")
