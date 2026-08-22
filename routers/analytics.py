@@ -14,6 +14,7 @@ def get_analytics(db: Session = Depends(get_db)):
             COUNT(*) FILTER (WHERE correction_type = 'confirmed')    AS accepted,
             COUNT(*) FILTER (WHERE correction_type = 'rejected')     AS rejected,
             COUNT(*) FILTER (WHERE correction_type = 'reclassified') AS edited
+        FROM corrections
     """)).fetchone()
 
     accepted = corr.accepted or 0
