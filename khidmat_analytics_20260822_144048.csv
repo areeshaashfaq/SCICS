@@ -1,0 +1,32 @@
+KHIDMAT ANALYTICS EXPORT
+Generated: 2026-08-22 14:41:35
+
+SUMMARY
+Metric,Value
+Total Documents,12
+Complete Documents,4
+Pending Documents,8
+Total Suggestions,22
+Flagged Ambiguous,2
+Accepted,7
+Rejected,2
+Edited,2
+Acceptance Rate,64%
+Avg Confidence,75%
+
+TOP CORRECTED CODES
+ICD Code,Description,Corrections
+E11.9,TYPE 2 DIABETES MELLITUS WITHOUT COMPLICATIONS,2
+
+RECENT ACTIVITY
+Action,ICD Code,Description,Coder,Patient,Time
+reclassified,E11.9,TYPE 2 DIABETES MELLITUS WITHOUT COMPLICATIONS,coder,,2026-08-22T08:19
+confirmed,,,coder,,2026-08-22T08:16
+confirmed,,,coder,,2026-08-22T08:13
+reclassified,E11.9,TYPE 2 DIABETES MELLITUS WITHOUT COMPLICATIONS,coder,,2026-08-22T08:13
+confirmed,,,coder,,2026-08-22T08:12
+rejected,,,coder,,2026-08-22T08:12
+confirmed,,,coder,,2026-08-22T07:59
+confirmed,,,coder,,2026-08-21T16:42
+confirmed,,,coder,,2026-08-21T16:42
+rejected,,,coder,,2026-08-21T16:42

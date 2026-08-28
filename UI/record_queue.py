@@ -69,7 +69,7 @@ class RecordRow(QFrame):
         lay.addWidget(make_label(self.doc.get("upload_date", "")[:10], 10, color=TEXT_SEC))
 
         status = self.doc.get("status", "pending")
-        chip_color = SUCCESS if status == "complete" else TEXT_SEC
+        chip_color = SUCCESS if status in ("reviewed", "finalized") else TEXT_SEC
         chip = QLabel(status.upper())
         chip.setStyleSheet(
             f"color:{chip_color}; border:1px solid {chip_color};"
@@ -186,7 +186,7 @@ class RecordQueueWindow(QMainWindow):
         self.search_input.textChanged.connect(self._on_search)
         sb_lay.addWidget(self.search_input)
 
-        for label, status in [("All", "all"), ("Pending", "pending"), ("Complete", "complete")]:
+        for label, status in [("All", "all"), ("Pending", "pending"), ("Reviewed", "reviewed")]:
             btn = QPushButton(label)
             btn.setFixedSize(72, 26)
             btn.setStyleSheet(f"""
@@ -300,23 +300,28 @@ class RecordQueueWindow(QMainWindow):
         self._render_page()
 
     def _on_search(self, text: str):
-        if not text:
-            self._filtered_docs = self._all_docs
-        else:
-            text = text.lower()
-            self._filtered_docs = [
-                d for d in self._all_docs
-                if text in d.get("patient_ref", "").lower()
-                or text in d.get("source_filename", "").lower()
-            ]
-        self._current_page = 0
-        self._render_page()
+        self._apply_filters()
 
     def _filter_by_status(self, status: str):
-        if status == "all":
-            self._filtered_docs = self._all_docs
-        else:
-            self._filtered_docs = [d for d in self._all_docs if d.get("status") == status]
+        self._status_filter = status
+        self._apply_filters()
+
+    def _apply_filters(self):
+        query = self.search_input.text().strip().lower()
+        docs = self._all_docs
+
+        status = getattr(self, "_status_filter", "all")
+        if status != "all":
+            docs = [d for d in docs if d.get("status") == status]
+
+        if query:
+            docs = [
+                d for d in docs
+                if query in str(d.get("patient_ref", "")).lower()
+                or query in str(d.get("source_filename", "")).lower()
+            ]
+
+        self._filtered_docs = docs
         self._current_page = 0
         self._render_page()
 
@@ -346,9 +351,9 @@ class RecordQueueWindow(QMainWindow):
             row = RecordRow(doc, on_open=self._open_record)
             self.list_layout.insertWidget(self.list_layout.count() - 1, row)
 
-        complete = len([d for d in docs if d.get("status") == "complete"])
+        complete = len([d for d in docs if d.get("status") in ("reviewed", "finalized")])
         self.status_lbl.setText(
-            f"{total} record{'s' if total != 1 else ''}  ·  {complete} complete  ·  {total - complete} pending"
+            f"{total} record{'s' if total != 1 else ''}  ·  {complete} reviewed  ·  {total - complete} pending"
             f"  ·  showing {start + 1}–{end}"
         )
         self.page_lbl.setText(f"Page {self._current_page + 1} of {total_pages}")

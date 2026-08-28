@@ -9,11 +9,13 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 def get_analytics(db: Session = Depends(get_db)):
 
     # Corrections counts
+    # These values must match the corrections_correction_type_check constraint:
+    # reclassified / rejected / added_missed / confirmed.
     corr = db.execute(text("""
         SELECT
-            COUNT(*) FILTER (WHERE correction_type = 'accept') AS accepted,
-            COUNT(*) FILTER (WHERE correction_type = 'reject') AS rejected,
-            COUNT(*) FILTER (WHERE correction_type = 'edit')   AS edited
+            COUNT(*) FILTER (WHERE correction_type = 'confirmed')    AS accepted,
+            COUNT(*) FILTER (WHERE correction_type = 'rejected')     AS rejected,
+            COUNT(*) FILTER (WHERE correction_type = 'reclassified') AS edited
         FROM corrections
     """)).fetchone()
 
@@ -30,11 +32,12 @@ def get_analytics(db: Session = Depends(get_db)):
     """)).scalar() or 0.0
 
     # Documents
+    # documents.status allows pending / processing / reviewed / finalized.
     docs = db.execute(text("""
         SELECT
             COUNT(*)                                        AS total_documents,
-            COUNT(*) FILTER (WHERE status = 'complete')    AS complete_documents,
-            COUNT(*) FILTER (WHERE status != 'complete')   AS pending_documents
+            COUNT(*) FILTER (WHERE status IN ('reviewed', 'finalized'))     AS complete_documents,
+            COUNT(*) FILTER (WHERE status NOT IN ('reviewed', 'finalized')) AS pending_documents
         FROM documents
     """)).fetchone()
 
@@ -47,6 +50,9 @@ def get_analytics(db: Session = Depends(get_db)):
     """)).fetchone()
 
     # Top 5 corrected codes
+    # Deliberately only counts rows where the coder actually supplied a new
+    # code, so plain accepts and rejects do not inflate the "most corrected"
+    # list. No suggestions join here, so no s.* references are valid.
     top_codes = db.execute(text("""
         SELECT
             c.corrected_icd_code        AS icd_code,
@@ -61,10 +67,13 @@ def get_analytics(db: Session = Depends(get_db)):
     """)).fetchall()
 
     # Recent activity
+    # An accept or reject leaves corrected_icd_code null, which showed as a
+    # blank cell in the dashboard. Fall back to the original code, then to the
+    # suggestion's own code, so every row names the code it refers to.
     recent = db.execute(text("""
         SELECT
             c.correction_type,
-            c.corrected_icd_code        AS icd_code,
+            COALESCE(c.corrected_icd_code, c.original_icd_code, s.icd_code) AS icd_code,
             i.description               AS description,
             c.coder_name,
             c.corrected_at,
@@ -72,7 +81,7 @@ def get_analytics(db: Session = Depends(get_db)):
         FROM corrections c
         LEFT JOIN suggestions s  ON s.suggestion_id = c.suggestion_id
         LEFT JOIN documents d    ON d.document_id   = c.document_id
-        LEFT JOIN icd_codes i    ON i.icd_code      = c.corrected_icd_code
+        LEFT JOIN icd_codes i    ON i.icd_code      = COALESCE(c.corrected_icd_code, c.original_icd_code, s.icd_code)
         ORDER BY c.corrected_at DESC
         LIMIT 10
     """)).fetchall()

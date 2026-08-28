@@ -1,8 +1,11 @@
 import re
 import subprocess
+import requests
 from rapidfuzz import fuzz
+import os
+from llm_client import ask_llm
 
-OLLAMA_PATH  = r"C:\Users\HP\AppData\Local\Programs\Ollama\ollama.exe"
+OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = "llama3.2"
 
 # ── ICD code regex ─────────────────────────────────────────────────────────────
@@ -17,12 +20,15 @@ def _find_suggestion(code: str, suggestions: list):
         return None
     return next((s for s in suggestions if s.get("icd_code", "").upper() == code), None)
 
-def _fuzzy_match(message: str, keywords: list, threshold: int = 70) -> bool:
+def _fuzzy_match(message: str, keywords: list, threshold: int = 90) -> bool:
     msg = message.lower()
     words = msg.split()
     for kw in keywords:
-        if kw in msg:
+        # whole-word match — all words in keyword phrase must appear as whole words
+        kw_words = kw.lower().split()
+        if all(w in words for w in kw_words):
             return True
+        # fuzzy match against individual words
         for word in words:
             if fuzz.ratio(word, kw) >= threshold:
                 return True
@@ -31,24 +37,24 @@ def _fuzzy_match(message: str, keywords: list, threshold: int = 70) -> bool:
 
 # ── intent routing ─────────────────────────────────────────────────────────────
 _INTENTS = [
-    ("ask_why",        ["why", "reason", "how come", "basis", "how did you get",
-                        "how was", "what made", "explain why"]),
-    ("ask_evidence",   ["evidence", "source", "where", "found in", "support",
-                        "text", "snippet", "phrase", "mention", "show me"]),
-    ("ask_confidence", ["confidence", "confident", "sure", "certain", "score",
+    ("ask_why",        ["why", "reason", "how come", "basis",
+                        "how did you get", "what made", "explain why"]),
+    ("ask_evidence",   ["evidence", "source", "found in", "support",
+                        "snippet", "phrase", "mention", "show me where"]),
+    ("ask_confidence", ["confidence", "confident", "certain", "score",
                         "percent", "accurate", "accuracy", "how sure"]),
     ("ask_ambiguous",  ["ambiguous", "flagged", "flag", "unclear", "uncertain",
                         "warning", "ambiguity", "unsure"]),
-    ("ask_meaning",    ["mean", "describe", "definition", "explain",
-                        "stands for", "full form", "what is", "what does"]),
-    ("ask_principal",  ["principal", "primary", "main diagnosis", "main",
-                        "primary diagnosis", "most important"]),
+    ("ask_meaning",    ["mean", "definition", "stands for", "full form",
+                        "what is", "what does"]),
+    ("ask_principal",  ["principal diagnosis", "primary diagnosis",
+                        "main diagnosis", "most important diagnosis"]),
     ("ask_procedures", ["procedure", "procedures", "surgery", "surgeries",
-                        "intervention", "operation", "done", "performed"]),
+                        "intervention", "operation", "performed"]),
     ("ask_meds",       ["medication", "medications", "drug", "drugs",
                         "medicine", "prescribed", "tablet", "injection"]),
-    ("ask_all",        ["all", "list", "show all", "every", "codes",
-                        "suggestions", "summary", "everything"]),
+    ("ask_all",        ["list all", "show all", "all codes", "all suggestions",
+                        "summary of all", "everything"]),
 ]
 
 def _detect_intent(message: str) -> str:
@@ -177,51 +183,67 @@ def _unknown():
 
 def _ask_ollama(message: str, suggestions: list, raw_text: str) -> str:
     sugg_context = "\n".join([
-        f"- {s.get('icd_code','?')} ({s.get('icd_description','')}) — "
-        f"found: \"{s.get('source_snippet','')}\" — "
+        f"- {s.get('icd_code','?')} ({s.get('icd_description','')}) - "
+        f"found: \"{s.get('source_snippet','')}\" - "
         f"confidence: {int((s.get('confidence_score') or 0)*100)}%"
         for s in suggestions[:10]
     ])
-
     prompt = (
         f"You are a clinical ICD coding assistant. A coder is reviewing a discharge summary "
         f"and has a question about ICD-10 code suggestions.\n\n"
         f"DISCHARGE SUMMARY (excerpt):\n{raw_text[:800]}\n\n"
         f"ICD SUGGESTIONS:\n{sugg_context}\n\n"
         f"CODER QUESTION: {message}\n\n"
-        f"Answer concisely and accurately. Reference specific codes and text evidence where relevant."
+        f"Answer concisely and accurately. Reference specific codes and text evidence where "
+        f"relevant. Only discuss codes that appear in the ICD SUGGESTIONS list above. "
+        f"Do not propose new codes."
     )
-
     try:
-        result = subprocess.run(
-            [OLLAMA_PATH, "run", OLLAMA_MODEL, prompt],
-            capture_output=True, text=True, timeout=30
+        r = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"num_predict": 300},
+                "keep_alive": "10m",
+            },
+            timeout=120,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except Exception:
-        pass
+        r.raise_for_status()
+        answer = r.json().get("response", "").strip()
+        if answer:
+            return answer
+    except Exception as e:
+        print(f"Ollama error: {e}")
     return None
 
-
-# ── main entry point ───────────────────────────────────────────────────────────
 
 def generate_response(message: str, suggestions: list, raw_text: str = "") -> str:
     intent = _detect_intent(message)
     code   = _extract_code(message)
     target = _find_suggestion(code, suggestions)
 
-    if intent == "ask_why":        return _ask_why(code, target, suggestions)
-    if intent == "ask_evidence":   return _ask_evidence(code, target, suggestions)
-    if intent == "ask_confidence": return _ask_confidence(code, target, suggestions)
-    if intent == "ask_ambiguous":  return _ask_ambiguous(code, target, suggestions)
-    if intent == "ask_meaning":    return _ask_meaning(code, target, suggestions)
+    if code and target:
+        if intent == "ask_why":        return _ask_why(code, target, suggestions)
+        if intent == "ask_evidence":   return _ask_evidence(code, target, suggestions)
+        if intent == "ask_confidence": return _ask_confidence(code, target, suggestions)
+        if intent == "ask_ambiguous":  return _ask_ambiguous(code, target, suggestions)
+        if intent == "ask_meaning":    return _ask_meaning(code, target, suggestions)
+
     if intent == "ask_principal":  return _ask_principal(suggestions)
     if intent == "ask_procedures": return _ask_procedures(suggestions)
     if intent == "ask_meds":       return _ask_meds(suggestions)
     if intent == "ask_all":        return _ask_all(suggestions)
 
+    # Gemini first (works on Railway), Ollama second (local only).
+    print("Falling back to LLM...")
+    llm_answer = ask_llm(message, suggestions, raw_text)
+    if llm_answer:
+        return llm_answer
+    return _unknown()
     # Fall back to Ollama for anything the rule-based system can't handle
+    print("Falling back to Ollama...")
     ollama_answer = _ask_ollama(message, suggestions, raw_text)
     if ollama_answer:
         return ollama_answer

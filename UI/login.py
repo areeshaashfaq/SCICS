@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFrame
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
 BG_APP   = "#0F1923"
@@ -39,7 +39,7 @@ class RoleCard(QFrame):
 
         icon_lbl = QLabel(icon)
         icon_lbl.setFont(QFont("Segoe UI", 18))
-        icon_lbl.setStyleSheet("background:transparent;")
+        icon_lbl.setStyleSheet(f"color:{ACCENT}; background:transparent;")
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(icon_lbl)
 
@@ -158,6 +158,27 @@ class LoginWindow(QMainWindow):
         lay.addWidget(self._field_label("Password"))
         lay.addSpacing(4)
         self.password_input = self._input_field("Enter password", password=True)
+
+        # Reveal toggle, parented to the field so it floats inside it.
+        # (A QLineEdit action only ever draws an icon, so text on one is
+        # invisible — hence a real button here.)
+        self._eye_btn = QPushButton("Show", self.password_input)
+        self._eye_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._eye_btn.setFixedSize(46, 24)
+        self._eye_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: none; font-size: 10px; font-weight: bold;
+            }}
+            QPushButton:hover {{ color: {ACCENT}; }}
+        """)
+        self._eye_btn.setToolTip("Show password")
+        self._eye_btn.clicked.connect(self._toggle_password)
+        # Stop typed text running underneath the button.
+        self.password_input.setTextMargins(0, 0, 48, 0)
+        # Position once the field has its real width.
+        QTimer.singleShot(0, self._place_eye_button)
+
         self.password_input.returnPressed.connect(self._attempt_login)
         lay.addWidget(self.password_input)
 
@@ -190,7 +211,7 @@ class LoginWindow(QMainWindow):
 
         lay.addSpacing(20)
 
-        hint = QLabel("demo  ·  coder: fatimah / coder123    admin: admin / admin123")
+        hint = QLabel("demo  ·  coder: coder / Siut2026    admin: admin / Siut2026")
         hint.setFont(QFont("Segoe UI", 8))
         hint.setStyleSheet(f"color:{BORDER}; background:transparent;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -212,6 +233,17 @@ class LoginWindow(QMainWindow):
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         outer.addWidget(footer)
         outer.addSpacing(14)
+
+    def _place_eye_button(self):
+        self._eye_btn.move(self.password_input.width() - 50, 7)
+
+    def _toggle_password(self):
+        showing = self.password_input.echoMode() == QLineEdit.EchoMode.Normal
+        self.password_input.setEchoMode(
+            QLineEdit.EchoMode.Password if showing else QLineEdit.EchoMode.Normal
+        )
+        self._eye_btn.setText("Show" if showing else "Hide")
+        self._eye_btn.setToolTip("Show password" if showing else "Hide password")
 
     def _field_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
@@ -279,6 +311,9 @@ class LoginWindow(QMainWindow):
             self.password_input.clear()
             self.password_input.setFocus()
             return
+        if error == "connection_failed":
+            self._show_error("Cannot reach the server. Check your connection.")
+            return
 
         if result.get("role") != self._selected_role:
             self._show_error(f"This account is not registered as a {self._selected_role}.")
@@ -304,6 +339,10 @@ class LoginWindow(QMainWindow):
         self.card_admin.set_selected(False)
         self.username_input.clear()
         self.password_input.clear()
+        # Always reopen hidden, whoever logs in next.
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._eye_btn.setText("Show")
+        self._eye_btn.setToolTip("Show password")
         self.error_lbl.setVisible(False)
 
 

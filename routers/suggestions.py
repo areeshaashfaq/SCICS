@@ -32,7 +32,7 @@ def update_suggestion(suggestion_id: int, decision: str, coder_name: str = "code
     """), {"suggestion_id": suggestion_id}).fetchone()
 
     if row:
-        correction_type = "accept" if decision == "approved" else "reject"
+        correction_type = "confirmed" if decision == "approved" else "rejected"
         db.execute(text("""
             INSERT INTO corrections (
                 suggestion_id, original_icd_code, corrected_icd_code,

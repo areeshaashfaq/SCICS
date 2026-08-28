@@ -1,4 +1,7 @@
+import html
+import re
 import sys
+
 import api_client
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -34,6 +37,96 @@ CONF_HI     = "#27AE60"
 CONF_MID    = "#F39C12"
 CONF_LO     = "#C0392B"
 
+DIALOG_STYLE = f"""
+    QMessageBox {{ background: {BG_PANEL}; }}
+    QLabel {{ color: {TEXT_PRI}; font-size: 12px; }}
+    QPushButton {{
+        background: {BG_CARD}; color: {TEXT_PRI};
+        border: 1px solid {BORDER}; border-radius: 4px;
+        padding: 5px 18px; font-size: 11px; min-width: 60px;
+    }}
+    QPushButton:hover {{ border-color: {ACCENT}; color: white; }}
+"""
+
+# Each section gets its own icon and accent colour so a coder can tell at a
+# glance which part of the list they are scrolling through.
+SECTION_STYLE = {
+    "Principal Diagnosis":   {"icon": "★", "fg": "#2E7DD1", "bg": "#0D2035"},
+    "Associative Diagnoses": {"icon": "◆", "fg": "#5BB8FF", "bg": "#122536"},
+    "Procedures":            {"icon": "✦", "fg": "#4FC3A1", "bg": "#0F2A26"},
+    "Medications":           {"icon": "●", "fg": "#F0C040", "bg": "#2A2416"},
+    "Needs manual coding":   {"icon": "⚠", "fg": "#8FA8BF", "bg": "#161F2A"},
+}
+
+
+def markdown_to_html(text: str) -> str:
+    """Render the small subset of markdown an LLM actually emits.
+
+    The chat bubble is a RichText QLabel, so it understands HTML but not
+    markdown — which is why raw ** and ### were showing up in answers. Rather
+    than forbidding the model from formatting (brittle, and it loses useful
+    emphasis on code names), convert what it sends.
+    """
+    if not text:
+        return ""
+
+    # Escape first so clinical text containing < or & cannot break the markup.
+    out = html.escape(text)
+
+    lines = out.split("\n")
+    rendered = []
+    in_list = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Headings: ### Title -> bold line. Real <h3> would be oversized here.
+        heading = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+        if heading:
+            if in_list:
+                rendered.append("</ul>")
+                in_list = False
+            rendered.append(f"<p><b>{heading.group(2)}</b></p>")
+            continue
+
+        # Bullets: *, - or • at the start of a line.
+        bullet = re.match(r"^[\*\-\u2022]\s+(.*)$", stripped)
+        if bullet:
+            if not in_list:
+                rendered.append("<ul style='margin:2px 0 2px 12px;'>")
+                in_list = True
+            rendered.append(f"<li>{bullet.group(1)}</li>")
+            continue
+
+        if in_list:
+            rendered.append("</ul>")
+            in_list = False
+
+        # Blockquote: > evidence line
+        quote = re.match(r"^&gt;\s*(.*)$", stripped)
+        if quote:
+            rendered.append(
+                f"<p style='margin:2px 0 2px 8px; color:#F0C040;'>{quote.group(1)}</p>"
+            )
+            continue
+
+        if stripped:
+            rendered.append(f"<p style='margin:3px 0;'>{stripped}</p>")
+
+    if in_list:
+        rendered.append("</ul>")
+
+    body = "".join(rendered)
+
+    # Inline styles last, so the markers inside list items and headings are
+    # handled too. Bold before italic: ** would otherwise be eaten by *.
+    body = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", body, flags=re.S)
+    body = re.sub(r"(?<![\w\*])\*(?!\s)(.+?)(?<!\s)\*(?![\w\*])", r"<i>\1</i>", body, flags=re.S)
+    body = re.sub(r"`([^`]+)`", r"<span style='color:#5BB8FF;'>\1</span>", body)
+
+    return body
+
+
 def conf_color(pct: int) -> str:
     if pct >= 85:
         return CONF_HI
@@ -52,6 +145,62 @@ def make_label(text: str, size: int = 12, bold: bool = False,
     if wrap:
         lbl.setWordWrap(True)
     return lbl
+
+
+class SectionHeader(QFrame):
+    """A clickable section bar that expands or collapses the cards beneath it."""
+
+    def __init__(self, title: str, count: int, on_toggle, expanded: bool = True,
+                 style_key: str = None, compact: bool = False):
+        super().__init__()
+        self._expanded = expanded
+        self._on_toggle = on_toggle
+        style = SECTION_STYLE.get(style_key or title,
+                                  SECTION_STYLE["Associative Diagnoses"])
+
+        # Compact headers are the nested "needs manual coding" bars that sit
+        # inside a section, so they read as subordinate to the section title.
+        self.setFixedHeight(28 if compact else 34)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        border = "dashed" if compact else "solid"
+        self.setStyleSheet(
+            f"SectionHeader {{ background:{style['bg']}; border-radius:5px;"
+            f" border:1px {border} {style['fg']}44;"
+            f" border-left:3px solid {style['fg']}; }}"
+            f"SectionHeader:hover {{ background:#1A2836; }}"
+        )
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10 if not compact else 8, 0, 10, 0)
+        lay.setSpacing(8)
+
+        self.arrow = QLabel("▾" if expanded else "▸")
+        self.arrow.setStyleSheet(
+            f"color:{style['fg']}; background:transparent; font-size:10px;"
+        )
+        lay.addWidget(self.arrow)
+
+        title_lbl = QLabel(f"{style['icon']}  {title}")
+        font = QFont("Segoe UI", 10 if compact else 11)
+        font.setBold(not compact)
+        title_lbl.setFont(font)
+        title_lbl.setStyleSheet(f"color:{style['fg']}; background:transparent;")
+        lay.addWidget(title_lbl)
+
+        lay.addStretch()
+
+        badge = QLabel(str(count))
+        badge.setStyleSheet(
+            f"color:{style['fg']}; background:transparent;"
+            f"border:1px solid {style['fg']}; border-radius:9px;"
+            f"padding:0px 7px; font-size:10px; font-weight:bold;"
+        )
+        lay.addWidget(badge)
+
+    def mousePressEvent(self, event):
+        self._expanded = not self._expanded
+        self.arrow.setText("▾" if self._expanded else "▸")
+        self._on_toggle(self._expanded)
 
 
 class DischargeSummaryPanel(QWidget):
@@ -115,6 +264,7 @@ class SuggestionCard(QFrame):
     def __init__(self, item: dict, is_principal: bool = False):
         super().__init__()
         self.item = item
+        self._is_principal = is_principal
         self.setFrameShape(QFrame.Shape.NoFrame)
         border_color = ACCENT if is_principal else BORDER
         self.setStyleSheet(f"""
@@ -185,9 +335,27 @@ class SuggestionCard(QFrame):
         """)
         self.btn_edit.clicked.connect(self._toggle_edit)
 
+        self.btn_undo = QPushButton("↩ Undo")
+        self.btn_undo.setFixedSize(64, 26)
+        self.btn_undo.setVisible(False)
+        self.btn_undo.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: 1px solid {BORDER}; border-radius: 4px;
+                font-size: 10px;
+            }}
+            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+        """)
+        self.btn_undo.clicked.connect(self._undo)
+
+        self._undo_timer = QTimer()
+        self._undo_timer.setSingleShot(True)
+        self._undo_timer.timeout.connect(lambda: self.btn_undo.setVisible(False))
+
         row1.addWidget(self.btn_accept)
         row1.addWidget(self.btn_reject)
         row1.addWidget(self.btn_edit)
+        row1.addWidget(self.btn_undo)
         lay.addLayout(row1)
 
         lay.addWidget(make_label(self.item.get("icd_description", ""), 11, wrap=True))
@@ -266,6 +434,41 @@ class SuggestionCard(QFrame):
 
         lay.addWidget(self.edit_row)
 
+        # The backend already knows what this coder decided. Without this the
+        # card rebuilds as undecided on every reload and their work looks lost.
+        existing = (self.item.get("coder_decision") or "pending").lower()
+        if existing == "approved":
+            self._apply_decided(SUCCESS)
+        elif existing == "rejected":
+            self._apply_decided(DANGER)
+
+    def _apply_decided(self, colour):
+        """Show a card as already decided, without re-sending it to the server."""
+        self._decided = True
+        self.setStyleSheet(
+            f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {colour}; border-radius:8px; }}"
+        )
+        self.btn_accept.setEnabled(False)
+        self.btn_reject.setEnabled(False)
+        self.btn_edit.setEnabled(False)
+        self.edit_row.setVisible(False)
+
+    def _show_undo(self):
+        self.btn_undo.setVisible(True)
+        self._undo_timer.start(5000)
+
+    def _undo(self):
+        self._undo_timer.stop()
+        self._decided = False
+        self.btn_undo.setVisible(False)
+        self.btn_accept.setEnabled(True)
+        self.btn_reject.setEnabled(True)
+        self.btn_edit.setEnabled(True)
+        border = ACCENT if self._is_principal else BORDER
+        self.setStyleSheet(
+            f"SuggestionCard {{ background:{BG_CARD}; border:1px solid {border}; border-radius:8px; }}"
+        )
+
     def _toggle_edit(self):
         if self._decided:
             return
@@ -280,9 +483,15 @@ class SuggestionCard(QFrame):
         corrected_code = self.edit_input.text().strip()
         if not corrected_code:
             return
+        # Record the correction first. If that fails, do not mark the
+        # suggestion approved, or the correction would be lost silently.
+        correction = api_client.submit_correction(self.item["suggestion_id"], corrected_code)
+        if isinstance(correction, dict) and correction.get("error"):
+            return
+        decision = api_client.submit_decision(self.item["suggestion_id"], "approved")
+        if isinstance(decision, dict) and decision.get("error"):
+            return
         self._decided = True
-        api_client.submit_decision(self.item["suggestion_id"], "approved")
-        api_client.submit_correction(self.item["suggestion_id"], corrected_code)
         self.code_lbl.setText(corrected_code)
         self.edit_row.setVisible(False)
         self.setStyleSheet(
@@ -295,8 +504,12 @@ class SuggestionCard(QFrame):
     def _accept(self):
         if self._decided:
             return
+        result = api_client.submit_decision(self.item["suggestion_id"], "approved")
+        # api_client has already shown the coder a dialog. Leave the card
+        # actionable so nothing looks saved when it wasn't.
+        if isinstance(result, dict) and result.get("error"):
+            return
         self._decided = True
-        api_client.submit_decision(self.item["suggestion_id"], "approved")
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {SUCCESS}; border-radius:8px; }}"
         )
@@ -304,12 +517,15 @@ class SuggestionCard(QFrame):
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
+        self._show_undo()
 
     def _reject(self):
         if self._decided:
             return
+        result = api_client.submit_decision(self.item["suggestion_id"], "rejected")
+        if isinstance(result, dict) and result.get("error"):
+            return
         self._decided = True
-        api_client.submit_decision(self.item["suggestion_id"], "rejected")
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {DANGER}; border-radius:8px; }}"
         )
@@ -317,6 +533,7 @@ class SuggestionCard(QFrame):
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
+        self._show_undo()
 
 
 class SuggestionsPanel(QWidget):
@@ -397,14 +614,18 @@ class SuggestionsPanel(QWidget):
         self.loading_lbl.setVisible(False)
 
     def _accept_all(self):
-        reply = QMessageBox.question(
-            self, "Accept All",
-            "Accept all suggestions? This cannot be undone.",
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Accept All")
+        box.setText("Accept all suggestions? This cannot be undone.")
+        box.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        if reply == QMessageBox.StandardButton.Yes:
-            for card in self._cards:
-                card._accept()
+        box.setStyleSheet(DIALOG_STYLE)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        for card in self._cards:
+            card._accept()
 
     def accept_current(self):
         if self._cards and self._current_index < len(self._cards):
@@ -451,32 +672,58 @@ class SuggestionsPanel(QWidget):
                 continue
             is_principal_section = (category == "Principal Diagnosis")
 
-            sec_header = QWidget()
-            sec_header.setFixedHeight(30)
-            sec_header.setStyleSheet(
-                f"background: {'#0D2035' if is_principal_section else '#12202E'};"
-                f"border-radius: 5px;"
-            )
-            sh_lay = QHBoxLayout(sec_header)
-            sh_lay.setContentsMargins(10, 0, 10, 0)
-            icon = "★" if is_principal_section else "◆"
-            sh_lay.addWidget(make_label(f"{icon}  {category}", 11, bold=True,
-                                        color=ACCENT if is_principal_section else TEXT_SEC))
-            count_lbl = QLabel(str(len(items)))
-            count_lbl.setStyleSheet(
-                f"color:{TEXT_SEC}; background:{BORDER}; border-radius:9px;"
-                f"padding:0px 7px; font-size:10px;"
-            )
-            sh_lay.addStretch()
-            sh_lay.addWidget(count_lbl)
-            self.cards_layout.insertWidget(insert_pos, sec_header)
-            insert_pos += 1
+            # Coded suggestions are the coder's actual work. Uncoded ones are
+            # things the pipeline found but could not map — still shown, because
+            # the coder can hit E and code them by hand, but folded into a
+            # sub-drawer inside their own section rather than listed separately.
+            coded   = [s for s in items if s.get("icd_code")]
+            uncoded = [s for s in items if not s.get("icd_code")]
+            coded.sort(key=lambda s: -(s.get("confidence_score") or 0))
 
-            for item in items:
+            body = QWidget()
+            body.setStyleSheet("background:transparent;")
+            body_lay = QVBoxLayout(body)
+            body_lay.setContentsMargins(0, 0, 0, 0)
+            body_lay.setSpacing(16)
+
+            for item in coded:
                 card = SuggestionCard(item, is_principal=is_principal_section)
                 self._cards.append(card)
-                self.cards_layout.insertWidget(insert_pos, card)
-                insert_pos += 1
+                body_lay.addWidget(card)
+
+            if uncoded:
+                sub_body = self._make_card_holder(uncoded, False, visible=False)
+                sub_header = SectionHeader(
+                    "Needs manual coding", len(uncoded),
+                    on_toggle=lambda shown, b=sub_body: b.setVisible(shown),
+                    expanded=False, style_key="Needs manual coding", compact=True,
+                )
+                body_lay.addWidget(sub_header)
+                body_lay.addWidget(sub_body)
+
+            header = SectionHeader(
+                category, len(items),
+                on_toggle=lambda shown, b=body: b.setVisible(shown),
+                expanded=True, style_key=category,
+            )
+            self.cards_layout.insertWidget(insert_pos, header)
+            insert_pos += 1
+            self.cards_layout.insertWidget(insert_pos, body)
+            insert_pos += 1
+
+    def _make_card_holder(self, items, is_principal, visible):
+        """Wrap a set of cards so the whole group can be shown or hidden at once."""
+        holder = QWidget()
+        holder.setStyleSheet("background:transparent;")
+        lay = QVBoxLayout(holder)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(16)
+        for item in items:
+            card = SuggestionCard(item, is_principal=is_principal)
+            self._cards.append(card)
+            lay.addWidget(card)
+        holder.setVisible(visible)
+        return holder
 
 
 class ChatBubble(QFrame):
@@ -530,11 +777,15 @@ class ChatBubble(QFrame):
         line.setFixedHeight(1)
         lay.addWidget(line)
 
-        msg = QLabel(text)
+        # The model replies in markdown; a RichText label speaks HTML, so the
+        # raw ** and ### were being shown literally. Convert instead of asking
+        # the model not to format — emphasis on code names is worth keeping.
+        msg = QLabel(markdown_to_html(text))
         msg.setFont(QFont("Segoe UI", 11))
         msg.setStyleSheet(f"color:{TEXT_PRI}; background:transparent;")
         msg.setWordWrap(True)
         msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(msg)
 
         time_lbl = QLabel(datetime.now().strftime("%H:%M"))
@@ -698,18 +949,56 @@ class ChatPanel(QWidget):
 
         self.msg_layout.insertWidget(self.msg_layout.count() - 1, wrapper)
 
+    def _add_typing_indicator(self):
+        bubble = QFrame()
+        bubble.setStyleSheet(
+            f"background:#111E2B; border-radius:10px; border-left:2px solid #1E5A3A;"
+        )
+        b_lay = QHBoxLayout(bubble)
+        b_lay.setContentsMargins(12, 8, 12, 8)
+        lbl = QLabel("◈  typing…")
+        lbl.setStyleSheet(f"color:{TEXT_SEC}; font-size:11px; background:transparent;")
+        b_lay.addWidget(lbl)
+
+        wrapper = QWidget()
+        wrapper.setStyleSheet("background:transparent;")
+        w_lay = QHBoxLayout(wrapper)
+        w_lay.setContentsMargins(0, 0, 0, 0)
+        bubble.setMaximumWidth(160)
+        w_lay.addWidget(bubble)
+        w_lay.addStretch()
+
+        self.msg_layout.insertWidget(self.msg_layout.count() - 1, wrapper)
+        self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum())
+        return wrapper
+
     def _send_message(self):
         text = self.input_box.text().strip()
         if not text:
             return
         self._add_bubble("user", text)
         self.input_box.clear()
+        self.input_box.setEnabled(False)
 
-        if self.document_id is not None:
-            response = api_client.send_chat(self.document_id, text)
-            answer = response.get("answer") or response.get("response")
-            if answer:
-                self._add_bubble("system", answer)
+        typing = self._add_typing_indicator()
+        QTimer.singleShot(50, lambda: self._do_send(text, typing))
+
+    def _do_send(self, text: str, typing_wrapper):
+        try:
+            answer = None
+            if self.document_id is not None:
+                response = api_client.send_chat(self.document_id, text)
+                answer = response.get("answer") or response.get("response")
+        except Exception as e:
+            answer = f"Error: {e}"
+        finally:
+            typing_wrapper.setParent(None)
+            typing_wrapper.deleteLater()
+            self.input_box.setEnabled(True)
+            self.input_box.setFocus()
+
+        if answer:
+            self._add_bubble("system", answer)
 
         self.scroll.verticalScrollBar().setValue(
             self.scroll.verticalScrollBar().maximum()
@@ -844,12 +1133,20 @@ class CodingWorkspace(QMainWindow):
     def _submit_review(self):
         self.submit_btn.setEnabled(False)
         self.submit_btn.setText("Submitting…")
-        try:
-            api_client.mark_complete(self.document_id)
-        except Exception:
+        # api_client no longer raises, so the old except branch never ran and
+        # the button stayed on "Submitting..." forever after a failure.
+        result = api_client.mark_complete(self.document_id)
+        if isinstance(result, dict) and result.get("error"):
             self.submit_btn.setEnabled(True)
             self.submit_btn.setText("Submit Review")
             return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Review Submitted")
+        box.setText("Review submitted. This document is now marked as reviewed.")
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        box.setStyleSheet(DIALOG_STYLE)
+        box.exec()
         self._go_back()
 
     def _go_back(self):

@@ -14,7 +14,7 @@
 #     7 samples, so it generalises to any discharge summary.
 
 
-
+from text_filters import is_measurement_noise, is_negated_phrase
 import re
 
 
@@ -128,6 +128,10 @@ def extract_diagnosis_phrases(sections, diag_tags=None):
                     if clean.lower() in _STOPWORDS:
                         continue
                     if re.match(r"^[\d\s\.\,\-\/]+$", clean):
+                        continue
+                    if is_measurement_noise(clean):
+                        continue
+                    if is_negated_phrase(clean):
                         continue
 
                     key = clean.lower()
