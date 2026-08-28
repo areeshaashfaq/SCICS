@@ -32,16 +32,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
-# ─── Layer 2: spaCy / scispaCy models ────────────────────────
-# Installed during BUILD, not at container startup — otherwise
-# every restart would re-download ~500MB.
-#   en_core_web_sm        — general English NLP (used indirectly)
-#   en_ner_bc5cdr_md      — clinical NER used by nlp/nlp_extractor.py;
-#                           installed from scispaCy's release URL because
-#                           it isn't on PyPI.
-RUN python -m spacy download en_core_web_sm \
- && pip install --no-cache-dir \
-    https://s3-us-west-2.amazonaws.com/ai2-s2-scispacy/releases/v0.5.4/en_ner_bc5cdr_md-0.5.4.tar.gz
+# ─── Layer 2: general spaCy model ────────────────────────────
+# en_ner_bc5cdr_md (the clinical NER model) is now installed as
+# part of requirements.txt above — the model URL is listed there
+# directly. We only need en_core_web_sm here, which medspaCy
+# and some spaCy pipelines rely on internally.
+RUN python -m spacy download en_core_web_sm
 
 # ─── Layer 3: application code ───────────────────────────────
 # Copied last because it changes on almost every commit.

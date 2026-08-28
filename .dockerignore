@@ -58,6 +58,9 @@ chatbot.py
 Khidmat Proposal 1 (pg 1-5).pdf
 ICD Codes of Discharge Summaries-20260706.xlsx
 README.md
+HANDOVER.md
+PROGRESS_UPDATE.md
+*.md
 
 # ─── Sample discharge summaries ──────
 # Used for local development and accuracy_report.py only.
