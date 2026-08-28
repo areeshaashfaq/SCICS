@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────
+# Files/folders excluded from the Docker image.
+# Reduces image size + prevents leaking secrets
+# or shipping files that don't belong at runtime.
+# ─────────────────────────────────────────────
+
+# ─── Version control ─────────────────
+.git
+.gitignore
+.gitattributes
+
+# ─── Python artefacts ────────────────
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.python-version
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# ─── Local env / secrets ─────────────
+# .env is provided at runtime via docker-compose env_file — NOT baked into image
+.env
+.env.*
+.venv
+venv/
+env/
+
+# ─── Editor / IDE ────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+
+# ─── OS junk ─────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── NLP local testing files ─────────
+# accuracy_report.py + accuracy_report.txt are Hafsa's local eval tools;
+# they need Samples/ and don't run inside the container.
+nlp/accuracy_report.py
+nlp/accuracy_report.txt
+nlp/__pycache__
+
+# ─── PyQt6 desktop UI ────────────────
+# Desktop app runs on the coder's machine, never inside the container
+UI/
+admin_dash.py
+codingworkspace.py
+chatbot.py
+
+# ─── Reference documents ─────────────
+# Human-readable docs, not needed at runtime
+Khidmat Proposal 1 (pg 1-5).pdf
+ICD Codes of Discharge Summaries-20260706.xlsx
+README.md
+
+# ─── Sample discharge summaries ──────
+# Used for local development and accuracy_report.py only.
+# The API receives real files via POST /documents/, not from this folder.
+Samples/
+
+# ─── Deprecated / replaced ───────────
+icd10_2019.csv                 # replaced by SIUT Diagnosis.csv
+Procfile                       # Heroku-specific, not needed with Docker
+
+# ─── Docker files themselves ─────────
+Dockerfile
+docker-compose.yml
+.dockerignore

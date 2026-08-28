@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────────────
+# SCICS docker-compose
+#
+# Single service (api): FastAPI backend + NLP pipeline.
+# Postgres is NOT included because SCICS uses Supabase (hosted).
+# If a local Postgres is ever needed for offline testing, uncomment
+# the "db" block at the bottom.
+#
+# Usage:
+#   docker compose build           # build the image (first time / after Dockerfile changes)
+#   docker compose up              # start (attached, logs in terminal)
+#   docker compose up -d           # start (detached, in background)
+#   docker compose logs -f api     # follow logs
+#   docker compose down            # stop and remove containers
+# ─────────────────────────────────────────────────────────────
+
+services:
+  api:
+    build: .
+    container_name: scics-api
+    ports:
+      - "8000:8000"                # host:container — hit http://localhost:8000 from your browser
+    env_file:
+      - .env                       # DATABASE_URL and any other secrets
+    restart: unless-stopped        # auto-restart on crash; won't restart if manually stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s            # give the NLP models time to load on first boot
+
+  # ─── Optional local Postgres — commented out ─────────────
+  # Uncomment ONLY if testing without Supabase (e.g. no internet).
+  # If you enable this, update DATABASE_URL in your .env to:
+  #     postgresql://khidmat:khidmat@db:5432/khidmat
+  # and run  docker compose exec db psql -U khidmat -d khidmat -f /docker-entrypoint-initdb.d/init.sql
+  # on first boot to create the tables.
+  #
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: scics-db
+  #   environment:
+  #     POSTGRES_USER: khidmat
+  #     POSTGRES_PASSWORD: khidmat
+  #     POSTGRES_DB: khidmat
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - ./database/create.sql:/docker-entrypoint-initdb.d/init.sql
+  #     - scics-db-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #
+  # volumes:
+  #   scics-db-data:
