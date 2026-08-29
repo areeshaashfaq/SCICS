@@ -51,7 +51,6 @@ nlp/__pycache__
 UI/
 admin_dash.py
 codingworkspace.py
-chatbot.py
 
 # ─── Reference documents ─────────────
 # Human-readable docs, not needed at runtime
