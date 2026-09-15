@@ -1,34 +1,3 @@
-"""
-llm_client.py — the LLM half of the coding assistant's chat.
-
-Why this exists
----------------
-The chatbot answers code-specific questions from the database (deterministic,
-always correct) and hands everything else to a language model. That model used
-to be Ollama on localhost, which works on a developer machine and cannot work
-on Railway: the container has neither Ollama installed nor the ~3GB of RAM
-llama3.2 needs resident.
-
-So the order is now Gemini first, Ollama second:
-
-  * Gemini runs on Google's servers, so the deployed backend can use it and the
-    container stays small.
-  * Ollama is kept as a local fallback, which means the chat still works with
-    no internet and no API key while developing.
-  * If neither answers, the caller falls back to its rule-based reply. The chat
-    never goes silent.
-
-Configuration (environment, or .env)
-------------------------------------
-    GEMINI_API_KEY   required for the Gemini path
-    GEMINI_MODEL     optional, defaults to gemini-2.5-flash
-    OLLAMA_URL       optional, defaults to http://localhost:11434
-    OLLAMA_MODEL     optional, defaults to llama3.2
-
-Free-tier model IDs change; run `python check_gemini.py` to see what the key
-can actually reach, then set GEMINI_MODEL if the default is unavailable.
-"""
-
 import os
 
 import requests

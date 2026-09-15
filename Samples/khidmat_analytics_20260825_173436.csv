@@ -1,0 +1,33 @@
+KHIDMAT ANALYTICS EXPORT
+Generated: 2026-08-25 17:34:43
+
+SUMMARY
+Metric,Value
+Total Documents,8
+Complete Documents,5
+Pending Documents,3
+Total Suggestions,161
+Flagged Ambiguous,82
+Accepted,55
+Rejected,26
+Edited,3
+Acceptance Rate,65%
+Avg Confidence,72%
+
+TOP CORRECTED CODES
+ICD Code,Description,Corrections
+E11.9,TYPE 2 DIABETES MELLITUS WITHOUT COMPLICATIONS,2
+Z79.84,LONG TERM (CURRENT) USE OF ORAL HYPOGLYCEMI,1
+
+RECENT ACTIVITY
+Action,ICD Code,Description,Coder,Patient,Time
+rejected,D64.9,"Anaemia, unspecified",coder,051904,2026-08-25T12:33
+confirmed,Z79.84,LONG TERM (CURRENT) USE OF ORAL HYPOGLYCEMI,coder,051904,2026-08-25T12:33
+reclassified,Z79.84,LONG TERM (CURRENT) USE OF ORAL HYPOGLYCEMI,coder,051904,2026-08-25T12:33
+rejected,,,coder,051904,2026-08-25T12:33
+confirmed,,,coder,490434,2026-08-25T05:02
+confirmed,,,coder,490434,2026-08-25T05:02
+confirmed,,,coder,490434,2026-08-25T05:02
+confirmed,,,coder,490434,2026-08-25T05:02
+confirmed,,,coder,490434,2026-08-25T05:02
+confirmed,,,coder,490434,2026-08-25T05:02
