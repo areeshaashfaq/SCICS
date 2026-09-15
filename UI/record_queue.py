@@ -2,8 +2,8 @@ import sys
 import api_client
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QScrollArea, QFrame, QFileDialog,
-    QInputDialog, QSizePolicy, QMessageBox, QLineEdit
+    QLabel, QPushButton, QScrollArea, QFrame,
+    QMessageBox, QLineEdit
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -149,7 +149,7 @@ class RecordQueueWindow(QMainWindow):
         logout_btn.clicked.connect(self._logout)
         tb.addWidget(logout_btn)
 
-        self.upload_btn = QPushButton("+ Upload .txt File")
+        self.upload_btn = QPushButton("+ Add Summary")
         self.upload_btn.setFixedSize(140, 34)
         self.upload_btn.setStyleSheet(f"""
             QPushButton {{
@@ -372,35 +372,44 @@ class RecordQueueWindow(QMainWindow):
             self._render_page()
 
     def _upload(self):
-        filepath, _ = QFileDialog.getOpenFileName(
-            self, "Select discharge summary", "", "Text Files (*.txt)"
-        )
-        if not filepath:
+        """Take a pasted summary or a PDF/TXT file, then code it.
+
+        SIUT asked for both routes: saving a .txt first just to upload it was
+        wasting coder time when the summary is already on their screen.
+        """
+        from import_dialog import ImportDialog
+
+        dialog = ImportDialog(self)
+        if dialog.exec() != ImportDialog.DialogCode.Accepted:
             return
 
-        patient_ref, ok = QInputDialog.getText(
-            self, "Patient Reference", "Enter patient ref (e.g. 00247-KHI):"
-        )
-        if not ok:
-            patient_ref = ""
+        patient_ref, pasted_text, filepath = dialog.result_values()
 
         self.upload_btn.setEnabled(False)
         self.upload_btn.setText("Processing…")
-        self.status_lbl.setText("Uploading and running NLP pipeline…")
+        self.status_lbl.setText("Reading the summary and running the NLP pipeline…")
 
         try:
-            result = api_client.upload_document(filepath, patient_ref)
+            if filepath:
+                result = api_client.upload_document(filepath, patient_ref)
+            else:
+                result = api_client.upload_text(pasted_text, patient_ref)
+
+            # api_client returns an error dict rather than raising, so the
+            # failure has to be checked here or a failed upload looks fine.
+            if isinstance(result, dict) and result.get("error"):
+                self.status_lbl.setText("Upload failed — see the message above.")
+                return
+
             doc_id = result.get("document_id")
             count  = result.get("suggestions_generated", 0)
             self.status_lbl.setText(f"Done — {count} suggestions generated.")
             self._load()
             if doc_id is not None:
                 self._open_record(doc_id)
-        except Exception as e:
-            self.status_lbl.setText(f"Upload failed: {e}")
         finally:
             self.upload_btn.setEnabled(True)
-            self.upload_btn.setText("+ Upload .txt File")
+            self.upload_btn.setText("+ Add Summary")
 
     def _open_record(self, document_id: int):
         if self.on_open_record:
@@ -415,12 +424,21 @@ class RecordQueueWindow(QMainWindow):
             self.hide()
 
     def _logout(self):
-        reply = QMessageBox.question(
-            self, "Log Out",
-            "Are you sure you want to log out?",
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Log Out")
+        box.setText("Are you sure you want to log out?")
+        box.setStandardButtons(
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        if reply == QMessageBox.StandardButton.Yes:
+        box.setStyleSheet(
+            f"QMessageBox {{ background:{BG_PANEL}; }}"
+            f"QLabel {{ color:{TEXT_PRI}; font-size:12px; }}"
+            f"QPushButton {{ background:{BG_CARD}; color:{TEXT_PRI};"
+            f" border:1px solid {BORDER}; border-radius:4px;"
+            f" padding:5px 18px; min-width:60px; }}"
+        )
+        if box.exec() == QMessageBox.StandardButton.Yes:
             if self.on_logout:
                 self.on_logout()
             self.close()
