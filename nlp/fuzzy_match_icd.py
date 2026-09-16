@@ -98,7 +98,7 @@ def _load_learned_synonyms():
         db_url = os.getenv("DATABASE_URL")
         if not db_url:
             return {}
-        conn = psycopg2.connect(db_url + "?sslmode=require")
+        conn = psycopg2.connect(db_url, sslmode="require")
         cur  = conn.cursor()
         cur.execute("SELECT phrase, icd_code FROM learned_synonyms")
         rows = cur.fetchall()
