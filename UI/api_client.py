@@ -4,10 +4,31 @@ import os
 
 import requests
 
+import json
+
 import fake_data
 
 USE_FAKE = False
-BASE_URL = "https://scics-production.up.railway.app"
+
+_DEFAULT_API_URL = "http://localhost:8000"
+_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+
+def _resolve_base_url():
+    env = os.getenv("KHIDMAT_API_URL", "").strip()
+    if env:
+        return env.rstrip("/")
+    try:
+        with open(_CONFIG_PATH, encoding="utf-8") as fh:
+            url = str(json.load(fh).get("api_url", "")).strip()
+            if url:
+                return url.rstrip("/")
+    except (OSError, ValueError):
+        pass
+    return _DEFAULT_API_URL
+
+
+BASE_URL = _resolve_base_url()
 
 # Every call used to end in a bare raise_for_status(). When the backend
 # returned an error the exception travelled all the way up and closed the
