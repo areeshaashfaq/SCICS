@@ -104,8 +104,8 @@ class BarRow(QFrame):
 
 
 class ActivityRow(QFrame):
-    ACTION_COLORS = {"accept": SUCCESS, "reject": DANGER, "edit": WARNING}
-    ACTION_ICONS  = {"accept": "✓", "reject": "✗", "edit": "✎"}
+    ACTION_COLORS = {"confirmed": SUCCESS, "rejected": DANGER, "reclassified": WARNING}
+    ACTION_ICONS  = {"confirmed": "✓", "rejected": "✗", "reclassified": "✎"}
 
     def __init__(self, entry: dict):
         super().__init__()
