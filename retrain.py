@@ -1,7 +1,3 @@
-# retrain.py — Automated retraining pipeline
-# Reads coder corrections and updates the learned_synonyms table
-# Run this periodically (weekly or after every N corrections)
-
 import psycopg2
 from dotenv import load_dotenv
 import os
@@ -23,7 +19,7 @@ def run_retraining():
             s.extracted_text
         FROM corrections c
         JOIN suggestions s ON s.suggestion_id = c.suggestion_id
-        WHERE c.correction_type = 'edit'
+        WHERE c.correction_type = 'reclassified'
         AND c.corrected_icd_code IS NOT NULL
         AND c.correction_id NOT IN (
             SELECT learned_from_correction_id 
