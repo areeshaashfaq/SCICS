@@ -450,15 +450,112 @@ def _apply_dm_combinations(entities):
 
 # 4. ENFORCE SINGLE PRINCIPAL DIAGNOSIS (UHDDS rule)
 
+# Section priority when picking the Principal Procedure.
+_PROC_SECTION_PRIORITY = {
+    "procedures": 0,
+    "management": 1,
+    "physical_findings": 2,
+    "reason_for_admission": 3,
+}
+
+
+# Chronic management codes that are almost never the Principal Diagnosis.
+# These are "known case of X" background conditions coders list as Associate
+# unless the admission is specifically for a complication/exacerbation of X.
+# Keep this list CONSERVATIVE — only codes that are truly rarely Principal.
+_CHRONIC_MGMT_PREFIXES = (
+    "E10.9", "E11.9", "E13.9",       # DM without complications
+    "I10",                            # Essential hypertension
+    "E78.",                           # Lipid disorders (hyperlipidaemia etc.)
+    "D56.3",                          # Thalassemia minor (trait, usually asymptomatic)
+    "Z79.",                           # Long term drug use
+    "Z87.",                           # Personal history
+    "Z88.",                           # Allergy status
+    "F17.",                           # Nicotine dependence
+    "Z95.",                           # Presence of cardiac/vascular implants
+)
+
+
+def _is_diagnostic_pcs(code):
+    # ICD-10-PCS codes are 7 characters. The 7th character encodes qualifier;
+    # when it is 'X' the procedure is classified as Diagnostic (e.g. biopsies
+    # like 0DB78ZX, 0W993ZX, 0B9C8ZX all end in X). Codes ending in anything
+    # else are Therapeutic (e.g. transfusion 30233N1, drainage 0W9930Z).
+    return bool(code) and len(code) == 7 and code[-1] == 'X'
+
+
+def _is_chronic_mgmt_code(code):
+    return bool(code) and code.startswith(_CHRONIC_MGMT_PREFIXES)
+
+
 def _enforce_single_principal(entities):
-    # Only the highest-confidence diagnosis_principal stays principal.
-    # The rest get downgraded to diagnosis_associative.
+    # ─── DIAGNOSIS ────────────────────────────────────────────────────────────
+    # Step 1: if multiple diagnosis_principal exist, keep highest-confidence.
     principals = [e for e in entities if e.get("suggestion_type") == "diagnosis_principal"]
-    if len(principals) <= 1:
-        return entities
-    principals.sort(key=lambda e: e.get("confidence_score") or 0, reverse=True)
-    for e in principals[1:]:
-        e["suggestion_type"] = "diagnosis_associative"
+    if len(principals) > 1:
+        principals.sort(key=lambda e: e.get("confidence_score") or 0, reverse=True)
+        for e in principals[1:]:
+            e["suggestion_type"] = "diagnosis_associative"
+        principals = [principals[0]]
+
+    # Step 2: if NO diagnosis_principal exists but the diagnosis section had
+    # only "known case of X, Y, Z" without a NOW WITH acute presentation, one
+    # of those chronic conditions is probably the admission reason.
+    # Reason like a coder: skip trivial chronic-management codes (DM, HTN,
+    # thalassemia-minor, Z79 long-term drugs, etc.) and promote the first
+    # remaining candidate. If the diagnosis section HAD "NOW WITH" but we
+    # couldn't code the acute part, DON'T promote — leaves it to the coder.
+    if not principals:
+        candidates = [e for e in entities
+                      if e.get("suggestion_type") == "diagnosis_associative"
+                      and e.get("source_section") == "diagnosis"
+                      and e.get("chronic_without_acute_split")
+                      and e.get("icd_code")
+                      and not _is_chronic_mgmt_code(e.get("icd_code"))]
+        if candidates:
+            # Prefer the first in textual order (coder convention: list the
+            # admission reason first), then highest confidence as tiebreak.
+            candidates.sort(key=lambda e: (
+                e.get("source_char_start", 999999),
+                -(e.get("confidence_score") or 0)
+            ))
+            candidates[0]["suggestion_type"] = "diagnosis_principal"
+
+    # ─── PROCEDURE ────────────────────────────────────────────────────────────
+    # UHDDS: Principal Procedure is the one most related to the Principal
+    # Diagnosis (i.e. therapeutic treatment of the main condition).
+    # Rules:
+    #   • If any therapeutic procedure exists → that's Principal.
+    #   • Else if exactly one diagnostic procedure exists → it's Principal.
+    #   • Else (multiple diagnostic procedures, no therapeutic) → ambiguous;
+    #     leave all as Associate so the coder picks (matches SIUT behaviour
+    #     when e.g. several endoscopic biopsies were performed).
+    all_procs = [e for e in entities
+                 if e.get("suggestion_type", "").startswith("procedure_")
+                 and e.get("icd_code")]
+    if all_procs:
+        therapeutic = [e for e in all_procs if not _is_diagnostic_pcs(e.get("icd_code"))]
+        diagnostic  = [e for e in all_procs if _is_diagnostic_pcs(e.get("icd_code"))]
+
+        chosen = None
+        if therapeutic:
+            therapeutic.sort(key=lambda e: (
+                _PROC_SECTION_PRIORITY.get(e.get("source_section", ""), 9),
+                -(e.get("confidence_score") or 0)
+            ))
+            chosen = therapeutic[0]
+        elif len(diagnostic) == 1:
+            chosen = diagnostic[0]
+        # else: multiple diagnostic + no therapeutic → leave ambiguous
+
+        for e in all_procs:
+            if chosen is None:
+                e["suggestion_type"] = "procedure_associative"
+            else:
+                e["suggestion_type"] = (
+                    "procedure_principal" if e is chosen else "procedure_associative"
+                )
+
     return entities
 
 
@@ -471,15 +568,31 @@ def _enforce_single_principal(entities):
 
 _DEFINITIVE_CHAPTERS = tuple("ABCDEFGHIJKLMNOPQ")   # ICD-10 chapters with real diseases
 
+# R-code categories that are legitimate FINDINGS codes, not symptoms —
+# coders use these as stand-alone diagnoses even when a definitive dx exists.
+# Keep this list conservative; only add families SIUT consistently codes.
+_PRESERVE_R_CODES = (
+    "R16.",   # Hepatomegaly / splenomegaly, not elsewhere classified
+    "R18.",   # Ascites
+    "R19.",   # Other symptoms and signs involving the digestive system and abdomen
+    "R22.",   # Localised swelling, mass and lump of skin and subcutaneous tissue
+)
+
 def _is_r_code(code):
     return bool(code) and code.startswith("R") and len(code) > 1 and code[1].isdigit()
+
+def _is_suppressible_symptom(code):
+    # True R-code AND not in the findings-exempt list.
+    if not _is_r_code(code):
+        return False
+    return not code.startswith(_PRESERVE_R_CODES)
 
 def _suppress_symptoms_globally(entities):
     all_codes = [e.get("icd_code") or "" for e in entities]
     has_definitive_dx = any(c and c.startswith(_DEFINITIVE_CHAPTERS) for c in all_codes)
     if not has_definitive_dx:
         return entities  # keep symptoms — no definitive dx to absorb them
-    return [e for e in entities if not _is_r_code(e.get("icd_code"))]
+    return [e for e in entities if not _is_suppressible_symptom(e.get("icd_code"))]
 
 
 # 6. SECTION-BASED CONFIDENCE DOWNGRADE (SOFT rule — do NOT drop)

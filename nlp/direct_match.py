@@ -95,7 +95,9 @@ def extract_diagnosis_phrases(sections, diag_tags=None):
             continue
 
         # Split on "NOW WITH" first to separate chronic from acute segments
-        if section_key == "diagnosis" and _NOW_WITH.search(section_text):
+        section_has_now_with = (section_key == "diagnosis"
+                                and bool(_NOW_WITH.search(section_text)))
+        if section_key == "diagnosis" and section_has_now_with:
             parts = _NOW_WITH.split(section_text, maxsplit=1)
             chronic_segment = parts[0]
             acute_segment   = parts[1] if len(parts) > 1 else ""
@@ -169,7 +171,17 @@ def extract_diagnosis_phrases(sections, diag_tags=None):
                         "source_section":    section_key,
                         "entity_type":       "DISEASE",
                         "base_confidence":   base_conf,
-                        "source":            "direct_line",  
+                        "source":            "direct_line",
+                        # True when this entity came from a diagnosis section that
+                        # listed only chronic ("known case of ...") conditions AND
+                        # had no "NOW WITH" acute presentation marker. These are
+                        # candidates for Principal promotion because one of the
+                        # chronic conditions is probably the admission reason.
+                        "chronic_without_acute_split": (
+                            section_key == "diagnosis"
+                            and is_historical
+                            and not section_has_now_with
+                        ),
                     })
 
     return results
@@ -471,6 +483,20 @@ def merge_all_entities(nlp_entities, direct_entities, zcode_entities, status_ent
     """
     seen_text = {e["extracted_text"].lower() for e in nlp_entities}
     merged = list(nlp_entities)
+
+    # Build lookup of direct-match entities so we can carry over their
+    # structural flags (like chronic_without_acute_split) onto the matching
+    # NLP entity that will win deduplication. Without this transfer, the
+    # Principal-promotion rule in _enforce_single_principal loses its signal.
+    direct_by_text = {e["extracted_text"].lower(): e for e in direct_entities}
+    _CARRY_FLAGS = ("chronic_without_acute_split",)
+    for e in merged:
+        text = e["extracted_text"].lower()
+        if text in direct_by_text:
+            dm = direct_by_text[text]
+            for flag in _CARRY_FLAGS:
+                if flag in dm:
+                    e[flag] = dm[flag]
 
     for e in direct_entities:
         if e["extracted_text"].lower() not in seen_text:

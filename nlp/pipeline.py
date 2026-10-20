@@ -24,6 +24,11 @@ def clean_text(raw_text):
     text = re.sub(r'\d{2}-[a-z]{3}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*', '', text)  # strip timestamps
     text = re.sub(r'[ \t]+', ' ', text)  # collapse spaces/tabs
     text = re.sub(r'\n{3,}', '\n\n', text)  # collapse excess blank lines
+    # Separate "/" between two words so scispaCy tokenises them as distinct
+    # concepts. Without this, "IDA/anal fissure" is tagged as a single DISEASE
+    # span and the "iron deficiency anemia" expansion is lost. Does NOT touch
+    # dates (12/06/2025), lab units (mg/dl), or abbreviations like R/L.
+    text = re.sub(r'([a-z]{3,})/([a-z]{3,})', r'\1 / \2', text)
     text = re.sub(r'\b(hrct|echo|mri|egd|bal|ct|us|cxr)(done|showed|showing|performed|reported)',
                   r'\1 \2', text, flags=re.IGNORECASE)
     return text.strip()
