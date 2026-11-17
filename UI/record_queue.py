@@ -1,34 +1,87 @@
 import sys
 import api_client
+import theme
+from load_error import make_load_error
+from datetime import datetime, timezone
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QScrollArea, QFrame,
     QMessageBox, QLineEdit
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
-BG_APP    = "#0F1923"
-BG_PANEL  = "#162230"
-BG_CARD   = "#1C2D3E"
-BORDER    = "#253D52"
-ACCENT    = "#2E7DD1"
-ACCENT_L  = "#3D8FE8"
-SUCCESS   = "#27AE60"
-DANGER    = "#C0392B"
-TEXT_PRI  = "#E8EDF2"
-TEXT_SEC  = "#8FA8BF"
-TEXT_CODE = "#5BB8FF"
-
-PAGE_SIZE = 10  # records per page
+BG_APP = BG_PANEL = BG_CARD = BG_TOP = BORDER = ""
+ACCENT = ACCENT_L = SUCCESS = DANGER = ""
+TEXT_PRI = TEXT_SEC = TEXT_CODE = ""
 
 
-def make_label(text, size=12, bold=False, color=TEXT_PRI, wrap=False):
+def _reload_colors():
+    global BG_APP, BG_PANEL, BG_CARD, BG_TOP, BORDER
+    global ACCENT, ACCENT_L, SUCCESS, DANGER
+    global TEXT_PRI, TEXT_SEC, TEXT_CODE
+    t = theme.current
+    BG_APP    = t["BG_APP"]
+    BG_PANEL  = t["BG_PANEL"]
+    BG_CARD   = t["BG_CARD"]
+    BG_TOP    = t["BG_TOP"]
+    BORDER    = t["BORDER"]
+    ACCENT    = t["ACCENT"]
+    ACCENT_L  = t["ACCENT_LITE"]
+    SUCCESS   = t["SUCCESS"]
+    DANGER    = t["DANGER"]
+    TEXT_PRI  = t["TEXT_PRI"]
+    TEXT_SEC  = t["TEXT_SEC"]
+    TEXT_CODE = t["TEXT_CODE"]
+
+
+_reload_colors()
+
+BATCH_SIZE = 25
+
+URGENCY_AMBER = "#F39C12"
+URGENCY_RED   = "#C0392B"
+
+
+def _relative_date(date_str: str):
+    """Return (label, color) like ('2 days ago', URGENCY_RED)."""
+    if not date_str:
+        return "—", TEXT_SEC
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        now  = datetime.now(timezone.utc)
+        diff = now - dt
+        hours = diff.total_seconds() / 3600
+        if hours < 1:
+            label = "Just now"
+        elif hours < 24:
+            h = int(hours)
+            label = f"{h}h ago"
+        elif hours < 48:
+            label = "Yesterday"
+        else:
+            days = int(hours // 24)
+            label = f"{days} days ago"
+
+        if hours > 48:
+            color = URGENCY_RED
+        elif hours > 24:
+            color = URGENCY_AMBER
+        else:
+            color = SUCCESS
+        return label, color
+    except Exception:
+        return date_str[:10], TEXT_SEC
+
+
+def make_label(text, size=12, bold=False, color=None, wrap=False):
     lbl = QLabel(text)
     f = QFont("Segoe UI", size)
     f.setBold(bold)
     lbl.setFont(f)
-    lbl.setStyleSheet(f"color:{color}; background:transparent;")
+    lbl.setStyleSheet(f"color:{color or TEXT_PRI}; background:transparent;")
     if wrap:
         lbl.setWordWrap(True)
     return lbl
@@ -66,7 +119,8 @@ class RecordRow(QFrame):
 
         lay.addStretch()
 
-        lay.addWidget(make_label(self.doc.get("upload_date", "")[:10], 10, color=TEXT_SEC))
+        rel_label, rel_color = _relative_date(self.doc.get("upload_date", ""))
+        lay.addWidget(make_label(rel_label, 10, color=rel_color))
 
         status = self.doc.get("status", "pending")
         chip_color = SUCCESS if status in ("reviewed", "finalized") else TEXT_SEC
@@ -91,6 +145,7 @@ class RecordRow(QFrame):
         lay.addWidget(btn)
 
 
+
 class RecordQueueWindow(QMainWindow):
     def __init__(self, on_open_record=None, on_logout=None):
         super().__init__()
@@ -98,7 +153,9 @@ class RecordQueueWindow(QMainWindow):
         self.on_logout = on_logout
         self._all_docs = []
         self._filtered_docs = []
-        self._current_page = 0
+        self._rendered_count = 0
+        self._sort_order = "newest"   # "newest" | "oldest"
+        self._saved_scroll = 0
         self.setWindowTitle("SIUT — Record Queue")
         self.resize(860, 680)
         self.setStyleSheet(f"QMainWindow {{ background:{BG_APP}; }} QWidget {{ background:{BG_APP}; }}")
@@ -115,13 +172,27 @@ class RecordQueueWindow(QMainWindow):
         # ── top bar ───────────────────────────────────────────────────────────
         top = QWidget()
         top.setFixedHeight(56)
-        top.setStyleSheet(f"background:#0A1520; border-bottom:1px solid {BORDER};")
+        top.setStyleSheet(f"background:{BG_TOP}; border-bottom:1px solid {BORDER};")
         tb = QHBoxLayout(top)
         tb.setContentsMargins(24, 0, 24, 0)
         tb.addWidget(make_label("SIUT  ICD Coder", 14, bold=True, color=ACCENT))
         tb.addSpacing(16)
         tb.addWidget(make_label("Record Queue", 12, color=TEXT_SEC))
         tb.addStretch()
+
+        theme_btn = QPushButton("☀" if theme.is_dark() else "◑")
+        theme_btn.setFixedSize(34, 34)
+        theme_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: 1px solid {BORDER}; border-radius: 6px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+        """)
+        theme_btn.setToolTip("Switch to light theme" if theme.is_dark() else "Switch to dark theme")
+        theme_btn.clicked.connect(self._toggle_theme)
+        tb.addWidget(theme_btn)
 
         history_btn = QPushButton("History")
         history_btn.setFixedSize(80, 34)
@@ -177,7 +248,7 @@ class RecordQueueWindow(QMainWindow):
         self.search_input.setFont(QFont("Segoe UI", 11))
         self.search_input.setStyleSheet(f"""
             QLineEdit {{
-                background: #0A1520; color: {TEXT_PRI};
+                background: {BG_TOP}; color: {TEXT_PRI};
                 border: 1px solid {BORDER}; border-radius: 5px;
                 padding: 0 10px;
             }}
@@ -199,6 +270,22 @@ class RecordQueueWindow(QMainWindow):
             """)
             btn.clicked.connect(lambda checked, s=status: self._filter_by_status(s))
             sb_lay.addWidget(btn)
+
+        divider = make_label("|", 11, color=BORDER)
+        sb_lay.addWidget(divider)
+
+        self._sort_btn = QPushButton("↓ Newest")
+        self._sort_btn.setFixedSize(90, 26)
+        self._sort_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {ACCENT};
+                border: 1px solid {ACCENT}55; border-radius: 5px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{ border-color:{ACCENT}; }}
+        """)
+        self._sort_btn.clicked.connect(self._toggle_sort)
+        sb_lay.addWidget(self._sort_btn)
 
         root.addWidget(search_bar)
 
@@ -246,64 +333,78 @@ class RecordQueueWindow(QMainWindow):
         self.list_layout.addStretch()
 
         self.scroll.setWidget(self.list_container)
+        self.scroll.verticalScrollBar().valueChanged.connect(self._on_scroll)
         root.addWidget(self.scroll, 1)
 
-        # ── pagination bar ────────────────────────────────────────────────────
-        page_bar = QWidget()
-        page_bar.setFixedHeight(48)
-        page_bar.setStyleSheet(f"background:{BG_PANEL}; border-top:1px solid {BORDER};")
-        pb = QHBoxLayout(page_bar)
-        pb.setContentsMargins(24, 0, 24, 0)
-        pb.setSpacing(8)
+    def _toggle_theme(self):
+        theme.toggle()
+        _reload_colors()
 
-        self.prev_btn = QPushButton("← Previous")
-        self.prev_btn.setFixedSize(96, 30)
-        self.prev_btn.setStyleSheet(f"""
-            QPushButton {{
-                background:transparent; color:{TEXT_SEC};
-                border:1px solid {BORDER}; border-radius:5px; font-size:11px;
-            }}
-            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
-            QPushButton:disabled {{ color:#3A4A5A; border-color:#1C2D3E; }}
-        """)
-        self.prev_btn.clicked.connect(self._prev_page)
-        pb.addWidget(self.prev_btn)
+        search_text   = self.search_input.text()
+        sort_order    = self._sort_order
+        sort_text     = self._sort_btn.text()
+        status_filter = getattr(self, "_status_filter", "all")
+        all_docs      = list(self._all_docs)
+        filtered_docs = list(self._filtered_docs)
 
-        self.page_lbl = make_label("Page 1 of 1", 11, color=TEXT_SEC)
-        self.page_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pb.addWidget(self.page_lbl)
+        old = self.centralWidget()
+        self.setStyleSheet(
+            f"QMainWindow {{ background:{BG_APP}; }} QWidget {{ background:{BG_APP}; }}"
+        )
+        self._build_ui()
 
-        self.next_btn = QPushButton("Next →")
-        self.next_btn.setFixedSize(96, 30)
-        self.next_btn.setStyleSheet(f"""
-            QPushButton {{
-                background:transparent; color:{TEXT_SEC};
-                border:1px solid {BORDER}; border-radius:5px; font-size:11px;
-            }}
-            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
-            QPushButton:disabled {{ color:#3A4A5A; border-color:#1C2D3E; }}
-        """)
-        self.next_btn.clicked.connect(self._next_page)
-        pb.addWidget(self.next_btn)
+        self._sort_order    = sort_order
+        self._sort_btn.setText(sort_text)
+        self._status_filter = status_filter
+        self._all_docs      = all_docs
+        self._filtered_docs = filtered_docs
+        self.search_input.blockSignals(True)
+        self.search_input.setText(search_text)
+        self.search_input.blockSignals(False)
 
-        root.addWidget(page_bar)
+        self._render_page()
+
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(theme.get_app_style())
+
+        if old:
+            old.setParent(None)
+            old.deleteLater()
 
     def _load(self):
         self.status_lbl.setText("Loading…")
-        try:
-            self._all_docs = api_client.get_documents()
-        except Exception as e:
-            self.status_lbl.setText(f"Cannot connect to backend: {e}")
+        docs = api_client.get_documents()
+        if api_client.LAST_ERROR:
+            # An empty list here would read as "No records found", which is wrong.
+            self._show_load_error(api_client.LAST_ERROR)
             return
-        self._filtered_docs = self._all_docs
-        self._current_page = 0
-        self._render_page()
+        self._all_docs = docs
+        self._apply_filters()
+
+    def _show_load_error(self, detail: str):
+        while self.list_layout.count() > 1:
+            item = self.list_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.list_layout.insertWidget(0, make_load_error(detail, self._load))
+        self.status_lbl.setText("Couldn't load records.")
 
     def _on_search(self, text: str):
         self._apply_filters()
 
     def _filter_by_status(self, status: str):
         self._status_filter = status
+        self._apply_filters()
+
+    def _toggle_sort(self):
+        if self._sort_order == "newest":
+            self._sort_order = "oldest"
+            self._sort_btn.setText("↑ Oldest")
+        else:
+            self._sort_order = "newest"
+            self._sort_btn.setText("↓ Newest")
         self._apply_filters()
 
     def _apply_filters(self):
@@ -321,55 +422,56 @@ class RecordQueueWindow(QMainWindow):
                 or query in str(d.get("source_filename", "")).lower()
             ]
 
+        reverse = (self._sort_order == "newest")
+        docs = sorted(docs, key=lambda d: d.get("upload_date", "") or "", reverse=reverse)
+
         self._filtered_docs = docs
-        self._current_page = 0
+        self._rendered_count = 0
         self._render_page()
 
     def _render_page(self):
-        # clear list
         while self.list_layout.count() > 1:
             item = self.list_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
+        self._rendered_count = 0
         docs = self._filtered_docs
-        total = len(docs)
-
-        if total == 0:
+        if not docs:
             self.status_lbl.setText("No records found.")
-            self.page_lbl.setText("Page 0 of 0")
-            self.prev_btn.setEnabled(False)
-            self.next_btn.setEnabled(False)
             return
 
-        total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-        start = self._current_page * PAGE_SIZE
-        end   = min(start + PAGE_SIZE, total)
-        page_docs = docs[start:end]
+        self._append_rows(min(BATCH_SIZE, len(docs)))
+        self._update_status_lbl()
 
-        for doc in page_docs:
+    def _append_rows(self, up_to: int):
+        docs = self._filtered_docs
+        end = min(up_to, len(docs))
+        for doc in docs[self._rendered_count:end]:
             row = RecordRow(doc, on_open=self._open_record)
             self.list_layout.insertWidget(self.list_layout.count() - 1, row)
+        self._rendered_count = end
 
+    def _append_more(self):
+        if self._rendered_count >= len(self._filtered_docs):
+            return
+        self._append_rows(self._rendered_count + BATCH_SIZE)
+        self._update_status_lbl()
+
+    def _update_status_lbl(self):
+        docs = self._filtered_docs
+        total = len(docs)
         complete = len([d for d in docs if d.get("status") in ("reviewed", "finalized")])
+        shown = self._rendered_count
         self.status_lbl.setText(
             f"{total} record{'s' if total != 1 else ''}  ·  {complete} reviewed  ·  {total - complete} pending"
-            f"  ·  showing {start + 1}–{end}"
+            + (f"  ·  showing {shown} of {total}" if shown < total else "")
         )
-        self.page_lbl.setText(f"Page {self._current_page + 1} of {total_pages}")
-        self.prev_btn.setEnabled(self._current_page > 0)
-        self.next_btn.setEnabled(self._current_page < total_pages - 1)
 
-    def _prev_page(self):
-        if self._current_page > 0:
-            self._current_page -= 1
-            self._render_page()
-
-    def _next_page(self):
-        total_pages = max(1, (len(self._filtered_docs) + PAGE_SIZE - 1) // PAGE_SIZE)
-        if self._current_page < total_pages - 1:
-            self._current_page += 1
-            self._render_page()
+    def _on_scroll(self, value: int):
+        bar = self.scroll.verticalScrollBar()
+        if bar.maximum() > 0 and value >= bar.maximum() * 0.85:
+            self._append_more()
 
     def _upload(self):
         """Take a pasted summary or a PDF/TXT file, then code it.
@@ -416,12 +518,21 @@ class RecordQueueWindow(QMainWindow):
             self.on_open_record(document_id)
         else:
             from codingworkspace import CodingWorkspace
+            self._saved_scroll = self.scroll.verticalScrollBar().value()
             self._workspace = CodingWorkspace(
                 document_id=document_id,
-                on_back=lambda: (self.show(), self._load()),
+                on_back=lambda: self._return_from_workspace(),
             )
-            self._workspace.show()
+            self._workspace.setGeometry(self.geometry())
+            self._workspace.showMaximized() if self.isMaximized() else self._workspace.show()
             self.hide()
+
+    def _return_from_workspace(self):
+        self._workspace.hide()
+        self.show()
+        saved = self._saved_scroll
+        self._load()
+        QTimer.singleShot(150, lambda: self.scroll.verticalScrollBar().setValue(saved))
 
     def _logout(self):
         box = QMessageBox(self)

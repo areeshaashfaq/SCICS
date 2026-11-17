@@ -13,6 +13,7 @@ can send whichever the coder actually used.
 
 import os
 
+import theme
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
@@ -20,24 +21,36 @@ from PyQt6.QtWidgets import (
     QTextEdit, QVBoxLayout, QWidget,
 )
 
-BG_APP    = "#0F1923"
-BG_PANEL  = "#162230"
-BG_DARK   = "#0A1520"
-BORDER    = "#253D52"
-ACCENT    = "#2E7DD1"
-ACCENT_L  = "#3D8FE8"
-DANGER    = "#C0392B"
-TEXT_PRI  = "#E8EDF2"
-TEXT_SEC  = "#8FA8BF"
+BG_APP = BG_PANEL = BG_TOP = BORDER = ""
+ACCENT = ACCENT_L = DANGER = ""
+TEXT_PRI = TEXT_SEC = ""
 
-# Below this a "summary" is almost certainly a mis-paste, and the pipeline
-# would produce nothing useful from it.
+
+def _reload_colors():
+    global BG_APP, BG_PANEL, BG_TOP, BORDER
+    global ACCENT, ACCENT_L, DANGER
+    global TEXT_PRI, TEXT_SEC
+    t = theme.current
+    BG_APP   = t["BG_APP"]
+    BG_PANEL = t["BG_PANEL"]
+    BG_TOP   = t["BG_TOP"]
+    BORDER   = t["BORDER"]
+    ACCENT   = t["ACCENT"]
+    ACCENT_L = t["ACCENT_LITE"]
+    DANGER   = t["DANGER"]
+    TEXT_PRI = t["TEXT_PRI"]
+    TEXT_SEC = t["TEXT_SEC"]
+
+
+_reload_colors()
+
 MIN_CHARS = 40
 
 
 class ImportDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+        _reload_colors()
         self.setWindowTitle("Add Discharge Summary")
         self.setMinimumSize(620, 520)
         self.setStyleSheet(f"QDialog {{ background:{BG_APP}; }}")
@@ -69,7 +82,7 @@ class ImportDialog(QDialog):
         self.text_box.setFont(QFont("Consolas", 10))
         self.text_box.setStyleSheet(f"""
             QTextEdit {{
-                background:{BG_DARK}; color:{TEXT_PRI};
+                background:{BG_TOP}; color:{TEXT_PRI};
                 border:1px solid {BORDER}; border-radius:6px; padding:8px;
             }}
             QTextEdit:focus {{ border-color:{ACCENT}; }}
@@ -160,12 +173,12 @@ class ImportDialog(QDialog):
         root.addLayout(buttons)
         self._refresh_ok()
 
-    def _label(self, text, size=11, bold=False, color=TEXT_PRI):
+    def _label(self, text, size=11, bold=False, color=None):
         lbl = QLabel(text)
         font = QFont("Segoe UI", size)
         font.setBold(bold)
         lbl.setFont(font)
-        lbl.setStyleSheet(f"color:{color}; background:transparent;")
+        lbl.setStyleSheet(f"color:{color or TEXT_PRI}; background:transparent;")
         return lbl
 
     def _rule(self):
@@ -177,7 +190,7 @@ class ImportDialog(QDialog):
     def _input_style(self):
         return f"""
             QLineEdit {{
-                background:{BG_DARK}; color:{TEXT_PRI};
+                background:{BG_TOP}; color:{TEXT_PRI};
                 border:1px solid {BORDER}; border-radius:6px; padding:0 10px;
             }}
             QLineEdit:focus {{ border-color:{ACCENT}; }}

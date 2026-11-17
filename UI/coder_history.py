@@ -1,5 +1,7 @@
 import sys
 import api_client
+import theme
+from load_error import make_load_error
 from collections import defaultdict
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -8,28 +10,40 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont
 
-# ── palette (matches other screens) ───────────────────────────────────────────
-BG_APP    = "#0F1923"
-BG_PANEL  = "#162230"
-BG_CARD   = "#1C2D3E"
-BG_DARK   = "#0A1520"
-BORDER    = "#253D52"
-ACCENT    = "#2E7DD1"
-ACCENT_L  = "#3D8FE8"
-SUCCESS   = "#27AE60"
-DANGER    = "#C0392B"
-WARNING   = "#D4A017"
-TEXT_PRI  = "#E8EDF2"
-TEXT_SEC  = "#8FA8BF"
-TEXT_CODE = "#5BB8FF"
+BG_APP = BG_PANEL = BG_CARD = BG_TOP = BORDER = ""
+ACCENT = ACCENT_L = SUCCESS = DANGER = ""
+TEXT_PRI = TEXT_SEC = TEXT_CODE = ""
+WARNING = "#D4A017"
 
 
-def make_label(text, size=12, bold=False, color=TEXT_PRI, wrap=False):
+def _reload_colors():
+    global BG_APP, BG_PANEL, BG_CARD, BG_TOP, BORDER
+    global ACCENT, ACCENT_L, SUCCESS, DANGER
+    global TEXT_PRI, TEXT_SEC, TEXT_CODE
+    t = theme.current
+    BG_APP    = t["BG_APP"]
+    BG_PANEL  = t["BG_PANEL"]
+    BG_CARD   = t["BG_CARD"]
+    BG_TOP    = t["BG_TOP"]
+    BORDER    = t["BORDER"]
+    ACCENT    = t["ACCENT"]
+    ACCENT_L  = t["ACCENT_LITE"]
+    SUCCESS   = t["SUCCESS"]
+    DANGER    = t["DANGER"]
+    TEXT_PRI  = t["TEXT_PRI"]
+    TEXT_SEC  = t["TEXT_SEC"]
+    TEXT_CODE = t["TEXT_CODE"]
+
+
+_reload_colors()
+
+
+def make_label(text, size=12, bold=False, color=None, wrap=False):
     lbl = QLabel(text)
     f = QFont("Segoe UI", size)
     f.setBold(bold)
     lbl.setFont(f)
-    lbl.setStyleSheet(f"color:{color}; background:transparent;")
+    lbl.setStyleSheet(f"color:{color or TEXT_PRI}; background:transparent;")
     if wrap:
         lbl.setWordWrap(True)
     return lbl
@@ -245,7 +259,7 @@ class CoderHistoryWindow(QMainWindow):
         # ── top bar ───────────────────────────────────────────────────────────
         top = QWidget()
         top.setFixedHeight(56)
-        top.setStyleSheet(f"background:{BG_DARK}; border-bottom:1px solid {BORDER};")
+        top.setStyleSheet(f"background:{BG_TOP}; border-bottom:1px solid {BORDER};")
         tb = QHBoxLayout(top)
         tb.setContentsMargins(24, 0, 24, 0)
         tb.setSpacing(12)
@@ -281,6 +295,20 @@ class CoderHistoryWindow(QMainWindow):
         """)
         refresh_btn.clicked.connect(self._load)
         tb.addWidget(refresh_btn)
+
+        theme_btn = QPushButton("☀" if theme.is_dark() else "◑")
+        theme_btn.setFixedSize(32, 32)
+        theme_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: 1px solid {BORDER}; border-radius: 6px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+        """)
+        theme_btn.setToolTip("Switch to light theme" if theme.is_dark() else "Switch to dark theme")
+        theme_btn.clicked.connect(self._toggle_theme)
+        tb.addWidget(theme_btn)
 
         root.addWidget(top)
 
@@ -319,6 +347,26 @@ class CoderHistoryWindow(QMainWindow):
         self.scroll.setWidget(self.list_container)
         root.addWidget(self.scroll, 1)
 
+    def _toggle_theme(self):
+        theme.toggle()
+        _reload_colors()
+
+        old = self.centralWidget()
+        self.setStyleSheet(
+            f"QMainWindow {{ background:{BG_APP}; }} QWidget {{ background:{BG_APP}; }}"
+        )
+        self._build_ui()
+        self._load()
+
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(theme.get_app_style())
+
+        if old:
+            old.setParent(None)
+            old.deleteLater()
+
     # ── data loading ──────────────────────────────────────────────────────────
     def _load(self):
         while self.list_layout.count() > 1:
@@ -328,10 +376,11 @@ class CoderHistoryWindow(QMainWindow):
 
         self.summary_lbl.setText("Loading…")
 
-        try:
-            corrections = api_client.get_corrections()
-        except Exception as e:
-            self.summary_lbl.setText(f"Cannot load history: {e}")
+        corrections = api_client.get_corrections()
+        if api_client.LAST_ERROR:
+            # Without this the empty list reads as "No corrections recorded yet."
+            self.list_layout.insertWidget(0, make_load_error(api_client.LAST_ERROR, self._load))
+            self.summary_lbl.setText("Couldn't load your history.")
             return
 
         if not corrections:

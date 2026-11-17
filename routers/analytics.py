@@ -23,11 +23,11 @@ def get_analytics(db: Session = Depends(get_db)):
     rejected = corr.rejected or 0
     edited   = corr.edited   or 0
     total_decisions = accepted + rejected + edited
-    acceptance_rate = round(accepted / total_decisions, 2) if total_decisions > 0 else 0.0
+    acceptance_rate = round(accepted / total_decisions, 4) if total_decisions > 0 else 0.0
 
     # Avg confidence
     avg_conf = db.execute(text("""
-        SELECT ROUND(AVG(confidence_score)::numeric, 2) FROM suggestions
+        SELECT ROUND(AVG(confidence_score)::numeric, 4) FROM suggestions
         WHERE confidence_score IS NOT NULL
     """)).scalar() or 0.0
 

@@ -1,13 +1,15 @@
 import html
 import re
 import sys
+import theme
+from load_error import make_load_error
 
 import api_client
 from datetime import datetime
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QLabel, QTextEdit, QLineEdit, QPushButton, QScrollArea, QFrame,
-    QSizePolicy, QMessageBox
+    QSizePolicy, QMessageBox, QSplitter
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont, QKeySequence, QShortcut
@@ -20,43 +22,66 @@ CATEGORY_MAP = {
     "medication":            "Medications",
 }
 
-BG_APP      = "#0F1923"
-BG_PANEL    = "#162230"
-BG_CARD     = "#1C2D3E"
-BG_CARD_ALT = "#1A2B3C"
-BORDER      = "#253D52"
-ACCENT      = "#2E7DD1"
-ACCENT_LITE = "#3D8FE8"
-SUCCESS     = "#27AE60"
-DANGER      = "#C0392B"
-TEXT_PRI    = "#E8EDF2"
-TEXT_SEC    = "#8FA8BF"
-TEXT_CODE   = "#5BB8FF"
-TEXT_EVD    = "#F0C040"
-CONF_HI     = "#27AE60"
-CONF_MID    = "#F39C12"
-CONF_LO     = "#C0392B"
+# All colour constants are initialised from theme.DARK by _reload_colors().
+# Call _reload_colors() again after theme.toggle() before rebuilding the UI.
+BG_APP = BG_PANEL = BG_CARD = BG_CARD_ALT = BG_TOP = BG_EDIT = ""
+BG_CHAT_H = BG_CHAT_H2 = BG_CHAT_USR = BG_CHAT_BOT = SEC_HOVER = ""
+BORDER = ACCENT = ACCENT_LITE = SUCCESS = DANGER = ""
+TEXT_PRI = TEXT_SEC = TEXT_CODE = TEXT_EVD = ""
+CONF_HI = CONF_MID = CONF_LO = ""
+DIALOG_STYLE = ""
+SECTION_STYLE: dict = {}
 
-DIALOG_STYLE = f"""
-    QMessageBox {{ background: {BG_PANEL}; }}
-    QLabel {{ color: {TEXT_PRI}; font-size: 12px; }}
-    QPushButton {{
-        background: {BG_CARD}; color: {TEXT_PRI};
-        border: 1px solid {BORDER}; border-radius: 4px;
-        padding: 5px 18px; font-size: 11px; min-width: 60px;
-    }}
-    QPushButton:hover {{ border-color: {ACCENT}; color: white; }}
-"""
 
-# Each section gets its own icon and accent colour so a coder can tell at a
-# glance which part of the list they are scrolling through.
-SECTION_STYLE = {
-    "Principal Diagnosis":   {"icon": "★", "fg": "#2E7DD1", "bg": "#0D2035"},
-    "Associative Diagnoses": {"icon": "◆", "fg": "#5BB8FF", "bg": "#122536"},
-    "Procedures":            {"icon": "✦", "fg": "#4FC3A1", "bg": "#0F2A26"},
-    "Medications":           {"icon": "●", "fg": "#F0C040", "bg": "#2A2416"},
-    "Needs manual coding":   {"icon": "⚠", "fg": "#8FA8BF", "bg": "#161F2A"},
-}
+def _reload_colors():
+    global BG_APP, BG_PANEL, BG_CARD, BG_CARD_ALT, BG_TOP, BG_EDIT
+    global BG_CHAT_H, BG_CHAT_H2, BG_CHAT_USR, BG_CHAT_BOT, SEC_HOVER
+    global BORDER, ACCENT, ACCENT_LITE, SUCCESS, DANGER
+    global TEXT_PRI, TEXT_SEC, TEXT_CODE, TEXT_EVD
+    global CONF_HI, CONF_MID, CONF_LO
+    global DIALOG_STYLE, SECTION_STYLE
+    t = theme.current
+    BG_APP      = t["BG_APP"]
+    BG_PANEL    = t["BG_PANEL"]
+    BG_CARD     = t["BG_CARD"]
+    BG_CARD_ALT = t["BG_CARD_ALT"]
+    BG_TOP      = t["BG_TOP"]
+    BG_EDIT     = t["BG_EDIT"]
+    BG_CHAT_H   = t["BG_CHAT_H"]
+    BG_CHAT_H2  = t["BG_CHAT_H2"]
+    BG_CHAT_USR = t["BG_CHAT_USR"]
+    BG_CHAT_BOT = t["BG_CHAT_BOT"]
+    SEC_HOVER   = t["SEC_HOVER"]
+    BORDER      = t["BORDER"]
+    ACCENT      = t["ACCENT"]
+    ACCENT_LITE = t["ACCENT_LITE"]
+    SUCCESS     = t["SUCCESS"]
+    DANGER      = t["DANGER"]
+    TEXT_PRI    = t["TEXT_PRI"]
+    TEXT_SEC    = t["TEXT_SEC"]
+    TEXT_CODE   = t["TEXT_CODE"]
+    TEXT_EVD    = t["TEXT_EVD"]
+    CONF_HI     = t["CONF_HI"]
+    CONF_MID    = t["CONF_MID"]
+    CONF_LO     = t["CONF_LO"]
+    DIALOG_STYLE = (
+        f"QMessageBox {{ background: {BG_PANEL}; }}"
+        f"QLabel {{ color: {TEXT_PRI}; font-size: 12px; }}"
+        f"QPushButton {{ background: {BG_CARD}; color: {TEXT_PRI};"
+        f" border: 1px solid {BORDER}; border-radius: 4px;"
+        f" padding: 5px 18px; font-size: 11px; min-width: 60px; }}"
+        f"QPushButton:hover {{ border-color: {ACCENT}; color: white; }}"
+    )
+    SECTION_STYLE = {
+        "Principal Diagnosis":   {"icon": "", "fg": "#2E7DD1", "bg": t["SEC_PRINCIPAL"]},
+        "Associative Diagnoses": {"icon": "", "fg": "#5BB8FF", "bg": t["SEC_ASSOCIATIVE"]},
+        "Procedures":            {"icon": "", "fg": "#4FC3A1", "bg": t["SEC_PROCEDURES"]},
+        "Medications":           {"icon": "", "fg": "#F0C040", "bg": t["SEC_MEDICATIONS"]},
+        "Needs manual coding":   {"icon": "⚠", "fg": "#8FA8BF", "bg": t["SEC_MANUAL"]},
+    }
+
+
+_reload_colors()  # initialise to dark theme on import
 
 
 def markdown_to_html(text: str) -> str:
@@ -90,7 +115,7 @@ def markdown_to_html(text: str) -> str:
             continue
 
         # Bullets: *, - or • at the start of a line.
-        bullet = re.match(r"^[\*\-\u2022]\s+(.*)$", stripped)
+        bullet = re.match(r"^[\*\-•]\s+(.*)$", stripped)
         if bullet:
             if not in_list:
                 rendered.append("<ul style='margin:2px 0 2px 12px;'>")
@@ -106,7 +131,7 @@ def markdown_to_html(text: str) -> str:
         quote = re.match(r"^&gt;\s*(.*)$", stripped)
         if quote:
             rendered.append(
-                f"<p style='margin:2px 0 2px 8px; color:#F0C040;'>{quote.group(1)}</p>"
+                f"<p style='margin:2px 0 2px 8px; color:{TEXT_EVD};'>{quote.group(1)}</p>"
             )
             continue
 
@@ -118,11 +143,13 @@ def markdown_to_html(text: str) -> str:
 
     body = "".join(rendered)
 
-    # Inline styles last, so the markers inside list items and headings are
-    # handled too. Bold before italic: ** would otherwise be eaten by *.
     body = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", body, flags=re.S)
     body = re.sub(r"(?<![\w\*])\*(?!\s)(.+?)(?<!\s)\*(?![\w\*])", r"<i>\1</i>", body, flags=re.S)
-    body = re.sub(r"`([^`]+)`", r"<span style='color:#5BB8FF;'>\1</span>", body)
+    body = re.sub(
+        r"`([^`]+)`",
+        lambda m: f"<span style='color:{TEXT_CODE};'>{m.group(1)}</span>",
+        body,
+    )
 
     return body
 
@@ -136,12 +163,12 @@ def conf_color(pct: int) -> str:
 
 
 def make_label(text: str, size: int = 12, bold: bool = False,
-               color: str = TEXT_PRI, wrap: bool = False) -> QLabel:
+               color: str = None, wrap: bool = False) -> QLabel:
     lbl = QLabel(text)
     font = QFont("Segoe UI", size)
     font.setBold(bold)
     lbl.setFont(font)
-    lbl.setStyleSheet(f"color: {color}; background: transparent;")
+    lbl.setStyleSheet(f"color: {color or TEXT_PRI}; background: transparent;")
     if wrap:
         lbl.setWordWrap(True)
     return lbl
@@ -158,16 +185,12 @@ class SectionHeader(QFrame):
         style = SECTION_STYLE.get(style_key or title,
                                   SECTION_STYLE["Associative Diagnoses"])
 
-        # Compact headers are the nested "needs manual coding" bars that sit
-        # inside a section, so they read as subordinate to the section title.
         self.setFixedHeight(28 if compact else 34)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        border = "dashed" if compact else "solid"
         self.setStyleSheet(
             f"SectionHeader {{ background:{style['bg']}; border-radius:5px;"
-            f" border:1px {border} {style['fg']}44;"
-            f" border-left:3px solid {style['fg']}; }}"
-            f"SectionHeader:hover {{ background:#1A2836; }}"
+            f" border:none; border-left:3px solid {style['fg']}; }}"
+            f"SectionHeader:hover {{ background:{SEC_HOVER}; }}"
         )
 
         lay = QHBoxLayout(self)
@@ -180,7 +203,7 @@ class SectionHeader(QFrame):
         )
         lay.addWidget(self.arrow)
 
-        title_lbl = QLabel(f"{style['icon']}  {title}")
+        title_lbl = QLabel(f"{style['icon']}  {title}" if style["icon"] else title)
         font = QFont("Segoe UI", 10 if compact else 11)
         font.setBold(not compact)
         title_lbl.setFont(font)
@@ -223,7 +246,7 @@ class DischargeSummaryPanel(QWidget):
         h_lay.addWidget(make_label("Discharge Summary", 13, bold=True))
         self.patient_chip = QLabel("—")
         self.patient_chip.setStyleSheet(
-            f"color:{TEXT_CODE}; background:#0D2035; border:1px solid {ACCENT};"
+            f"color:{TEXT_CODE}; background:{BG_EDIT}; border:1px solid {ACCENT};"
             f"border-radius:4px; padding:2px 8px; font-size:11px;"
         )
         h_lay.addStretch()
@@ -282,6 +305,7 @@ class SuggestionCard(QFrame):
         lay.setSpacing(6)
 
         self._decided = False
+        self._is_medication = (self.item.get("suggestion_type", "") == "medication")
 
         row1 = QHBoxLayout()
         row1.setSpacing(8)
@@ -299,78 +323,126 @@ class SuggestionCard(QFrame):
         row1.addWidget(conf_badge)
         row1.addStretch()
 
-        self.btn_accept = QPushButton("Accept  [A]")
-        self.btn_accept.setFixedSize(80, 26)
-        self.btn_accept.setStyleSheet(f"""
-            QPushButton {{
-                background: {SUCCESS}; color: white;
-                border: none; border-radius: 4px;
-                font-size: 11px; font-weight: bold;
-            }}
-            QPushButton:hover {{ background: #2ECC71; }}
-        """)
-        self.btn_accept.clicked.connect(self._accept)
+        if self._is_medication:
+            self.btn_remove = QPushButton("✕ Remove")
+            self.btn_remove.setFixedSize(76, 26)
+            self.btn_remove.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {DANGER};
+                    border: 1px solid {DANGER}55; border-radius: 4px;
+                    font-size: 10px;
+                }}
+                QPushButton:hover {{ background: {DANGER}22; border-color: {DANGER}; }}
+            """)
+            self.btn_remove.clicked.connect(self._remove_medication)
 
-        self.btn_reject = QPushButton("Reject  [R]")
-        self.btn_reject.setFixedSize(80, 26)
-        self.btn_reject.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {DANGER};
-                border: 1px solid {DANGER}; border-radius: 4px;
-                font-size: 11px; font-weight: bold;
-            }}
-            QPushButton:hover {{ background: {DANGER}; color: white; }}
-        """)
-        self.btn_reject.clicked.connect(self._reject)
+            self.btn_undo_remove = QPushButton("↩ Undo")
+            self.btn_undo_remove.setFixedSize(64, 26)
+            self.btn_undo_remove.setVisible(False)
+            self.btn_undo_remove.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {TEXT_SEC};
+                    border: 1px solid {BORDER}; border-radius: 4px;
+                    font-size: 10px;
+                }}
+                QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+            """)
+            self.btn_undo_remove.clicked.connect(self._undo_remove_medication)
 
-        self.btn_edit = QPushButton("Edit  [E]")
-        self.btn_edit.setFixedSize(64, 26)
-        self.btn_edit.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {TEXT_SEC};
-                border: 1px solid {BORDER}; border-radius: 4px;
-                font-size: 11px;
-            }}
-            QPushButton:hover {{ color: {TEXT_PRI}; border-color: {ACCENT}; }}
-        """)
-        self.btn_edit.clicked.connect(self._toggle_edit)
+            row1.addWidget(self.btn_remove)
+            row1.addWidget(self.btn_undo_remove)
 
-        self.btn_undo = QPushButton("↩ Undo")
-        self.btn_undo.setFixedSize(64, 26)
-        self.btn_undo.setVisible(False)
-        self.btn_undo.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {TEXT_SEC};
-                border: 1px solid {BORDER}; border-radius: 4px;
-                font-size: 10px;
-            }}
-            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
-        """)
-        self.btn_undo.clicked.connect(self._undo)
+        if not self._is_medication:
+            self.btn_accept = QPushButton("Accept  [A]")
+            self.btn_accept.setFixedSize(80, 26)
+            self.btn_accept.setStyleSheet(f"""
+                QPushButton {{
+                    background: {SUCCESS}; color: white;
+                    border: none; border-radius: 4px;
+                    font-size: 11px; font-weight: bold;
+                }}
+                QPushButton:hover {{ background: #2ECC71; }}
+            """)
+            self.btn_accept.clicked.connect(self._accept)
 
-        self._undo_timer = QTimer()
-        self._undo_timer.setSingleShot(True)
-        self._undo_timer.timeout.connect(lambda: self.btn_undo.setVisible(False))
+            self.btn_reject = QPushButton("Reject  [R]")
+            self.btn_reject.setFixedSize(80, 26)
+            self.btn_reject.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {DANGER};
+                    border: 1px solid {DANGER}; border-radius: 4px;
+                    font-size: 11px; font-weight: bold;
+                }}
+                QPushButton:hover {{ background: {DANGER}; color: white; }}
+            """)
+            self.btn_reject.clicked.connect(self._reject)
 
-        row1.addWidget(self.btn_accept)
-        row1.addWidget(self.btn_reject)
-        row1.addWidget(self.btn_edit)
-        row1.addWidget(self.btn_undo)
+            self.btn_edit = QPushButton("Edit  [E]")
+            self.btn_edit.setFixedSize(64, 26)
+            self.btn_edit.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {TEXT_SEC};
+                    border: 1px solid {BORDER}; border-radius: 4px;
+                    font-size: 11px;
+                }}
+                QPushButton:hover {{ color: {TEXT_PRI}; border-color: {ACCENT}; }}
+            """)
+            self.btn_edit.clicked.connect(self._toggle_edit)
+
+            self.btn_undo = QPushButton("↩ Undo")
+            self.btn_undo.setFixedSize(64, 26)
+            self.btn_undo.setVisible(False)
+            self.btn_undo.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {TEXT_SEC};
+                    border: 1px solid {BORDER}; border-radius: 4px;
+                    font-size: 10px;
+                }}
+                QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+            """)
+            self.btn_undo.clicked.connect(self._undo)
+
+            row1.addWidget(self.btn_accept)
+            row1.addWidget(self.btn_reject)
+            row1.addWidget(self.btn_edit)
+            row1.addWidget(self.btn_undo)
+
         lay.addLayout(row1)
 
         lay.addWidget(make_label(self.item.get("icd_description", ""), 11, wrap=True))
 
-        evd_row = QHBoxLayout()
-        evd_row.setSpacing(4)
-        evd_icon = make_label("⟦", 10, color=TEXT_EVD)
-        evd_text = make_label(f'"{self.item.get("source_snippet", "")}"', 10, color=TEXT_EVD, wrap=True)
-        evd_row.addWidget(evd_icon, 0, Qt.AlignmentFlag.AlignTop)
-        evd_row.addWidget(evd_text, 1)
-        lay.addLayout(evd_row)
+        snippet = self.item.get("source_snippet", "")
+        if snippet:
+            evd_toggle = QPushButton("▸  source text")
+            evd_toggle.setFlat(True)
+            evd_toggle.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: {TEXT_EVD};
+                    border: none; font-size: 10px; text-align: left; padding: 0;
+                }}
+                QPushButton:hover {{ color: #F8D878; }}
+            """)
+
+            evd_body = QWidget()
+            evd_body.setVisible(False)
+            evd_body.setStyleSheet("background:transparent;")
+            evd_inner = QHBoxLayout(evd_body)
+            evd_inner.setContentsMargins(0, 2, 0, 0)
+            evd_inner.setSpacing(4)
+            evd_inner.addWidget(make_label("⟦", 10, color=TEXT_EVD), 0, Qt.AlignmentFlag.AlignTop)
+            evd_inner.addWidget(make_label(f'"{snippet}"', 10, color=TEXT_EVD, wrap=True), 1)
+
+            def _toggle_evd(checked, btn=evd_toggle, body=evd_body):
+                body.setVisible(not body.isVisible())
+                btn.setText("▾  source text" if body.isVisible() else "▸  source text")
+
+            evd_toggle.clicked.connect(_toggle_evd)
+            lay.addWidget(evd_toggle)
+            lay.addWidget(evd_body)
 
         sec_lbl = QLabel(self.item.get("suggestion_type", "").replace("_", " ").title())
         sec_lbl.setStyleSheet(
-            f"color:{TEXT_SEC}; background:#0D1E2E; border-radius:3px;"
+            f"color:{TEXT_SEC}; background:{BG_EDIT}; border-radius:3px;"
             f"padding:1px 6px; font-size:10px;"
         )
         sec_lbl.setFixedHeight(20)
@@ -383,7 +455,7 @@ class SuggestionCard(QFrame):
 
         self.edit_row = QWidget()
         self.edit_row.setStyleSheet(
-            f"background:#0D1E2E; border-radius:5px; border:1px solid {ACCENT};"
+            f"background:{BG_EDIT}; border-radius:5px; border:1px solid {ACCENT};"
         )
         self.edit_row.setVisible(False)
         er = QHBoxLayout(self.edit_row)
@@ -452,18 +524,49 @@ class SuggestionCard(QFrame):
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
         self.edit_row.setVisible(False)
+        self._show_undo()
+
+    def set_focused(self, focused: bool):
+        if self._decided:
+            return
+        if focused:
+            self.setStyleSheet(
+                f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {ACCENT}; border-radius:8px; }}"
+            )
+        else:
+            border = ACCENT if self._is_principal else BORDER
+            self.setStyleSheet(
+                f"SuggestionCard {{ background:{BG_CARD}; border:1px solid {border}; border-radius:8px; }}"
+            )
+
+    def _remove_medication(self):
+        self.setStyleSheet(
+            f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {DANGER}55; border-radius:8px; }}"
+        )
+        self.btn_remove.setVisible(False)
+        self.btn_undo_remove.setVisible(True)
+
+    def _undo_remove_medication(self):
+        self.btn_remove.setVisible(True)
+        self.btn_undo_remove.setVisible(False)
+        self.setStyleSheet(
+            f"SuggestionCard {{ background:{BG_CARD}; border:1px solid {BORDER}; border-radius:8px; }}"
+        )
 
     def _show_undo(self):
         self.btn_undo.setVisible(True)
-        self._undo_timer.start(5000)
 
     def _undo(self):
-        self._undo_timer.stop()
         self._decided = False
+        self.item["coder_decision"] = None
         self.btn_undo.setVisible(False)
         self.btn_accept.setEnabled(True)
         self.btn_reject.setEnabled(True)
         self.btn_edit.setEnabled(True)
+        if hasattr(self, "_original_code"):
+            self.item["icd_code"] = self._original_code
+            self.code_lbl.setText(self._original_code)
+            del self._original_code
         border = ACCENT if self._is_principal else BORDER
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:1px solid {border}; border-radius:8px; }}"
@@ -483,16 +586,17 @@ class SuggestionCard(QFrame):
         corrected_code = self.edit_input.text().strip()
         if not corrected_code:
             return
-        # Record the correction first. If that fails, do not mark the
-        # suggestion approved, or the correction would be lost silently.
         correction = api_client.submit_correction(self.item["suggestion_id"], corrected_code)
         if isinstance(correction, dict) and correction.get("error"):
             return
         decision = api_client.submit_decision(self.item["suggestion_id"], "approved")
         if isinstance(decision, dict) and decision.get("error"):
             return
+        self._original_code = self.item.get("icd_code", "")
+        self.item["coder_decision"] = "approved"
         self._decided = True
         self.code_lbl.setText(corrected_code)
+        self.item["icd_code"] = corrected_code
         self.edit_row.setVisible(False)
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid #D4A017; border-radius:8px; }}"
@@ -500,16 +604,16 @@ class SuggestionCard(QFrame):
         self.btn_accept.setEnabled(False)
         self.btn_reject.setEnabled(False)
         self.btn_edit.setEnabled(False)
+        self._show_undo()
 
     def _accept(self):
-        if self._decided:
+        if self._decided or self._is_medication:
             return
         result = api_client.submit_decision(self.item["suggestion_id"], "approved")
-        # api_client has already shown the coder a dialog. Leave the card
-        # actionable so nothing looks saved when it wasn't.
         if isinstance(result, dict) and result.get("error"):
             return
         self._decided = True
+        self.item["coder_decision"] = "approved"
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {SUCCESS}; border-radius:8px; }}"
         )
@@ -520,12 +624,13 @@ class SuggestionCard(QFrame):
         self._show_undo()
 
     def _reject(self):
-        if self._decided:
+        if self._decided or self._is_medication:
             return
         result = api_client.submit_decision(self.item["suggestion_id"], "rejected")
         if isinstance(result, dict) and result.get("error"):
             return
         self._decided = True
+        self.item["coder_decision"] = "rejected"
         self.setStyleSheet(
             f"SuggestionCard {{ background:{BG_CARD}; border:2px solid {DANGER}; border-radius:8px; }}"
         )
@@ -557,10 +662,21 @@ class SuggestionsPanel(QWidget):
         h_lay.setContentsMargins(16, 0, 16, 0)
         h_lay.addWidget(make_label("ICD Suggestions", 13, bold=True))
 
-        # keyboard shortcut hint
-        hint = make_label("A=Accept  R=Reject  E=Edit", 9, color=TEXT_SEC)
-        h_lay.addWidget(hint)
         h_lay.addStretch()
+
+        accept_80 = QPushButton("Accept ≥80%")
+        accept_80.setFixedSize(104, 30)
+        accept_80.setToolTip("Accept all undecided suggestions with ≥80% confidence")
+        accept_80.setStyleSheet(f"""
+            QPushButton {{
+                background: {SUCCESS}; color: white;
+                border: none; border-radius: 5px;
+                font-size: 11px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background: #2ECC71; }}
+        """)
+        accept_80.clicked.connect(self._accept_high_confidence)
+        h_lay.addWidget(accept_80)
 
         accept_all = QPushButton("Accept All")
         accept_all.setFixedSize(86, 30)
@@ -576,7 +692,6 @@ class SuggestionsPanel(QWidget):
         h_lay.addWidget(accept_all)
         root.addWidget(header)
 
-        # loading spinner label
         self.loading_lbl = QLabel("⏳  Loading suggestions...")
         self.loading_lbl.setFont(QFont("Segoe UI", 11))
         self.loading_lbl.setStyleSheet(f"color:{TEXT_SEC}; background:transparent; padding:20px;")
@@ -604,6 +719,7 @@ class SuggestionsPanel(QWidget):
         self.cards_layout.addStretch()
 
         scroll.setWidget(self.container)
+        self.scroll = scroll
         root.addWidget(self.loading_lbl)
         root.addWidget(scroll)
 
@@ -612,6 +728,43 @@ class SuggestionsPanel(QWidget):
 
     def hide_loading(self):
         self.loading_lbl.setVisible(False)
+
+    def show_load_error(self, detail: str, on_retry):
+        self._cards = []
+        self._current_index = 0
+        self.hide_loading()
+        while self.cards_layout.count() > 1:
+            item = self.cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.cards_layout.insertWidget(0, make_load_error(detail, on_retry))
+
+    def _accept_high_confidence(self):
+        eligible = [
+            card for card in self._cards
+            if not card._decided
+            and int((card.item.get("confidence_score") or 0) * 100) >= 80
+        ]
+        if not eligible:
+            box = QMessageBox(self)
+            box.setWindowTitle("Accept ≥80%")
+            box.setText("No undecided suggestions with ≥80% confidence found.")
+            box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            box.setStyleSheet(DIALOG_STYLE)
+            box.exec()
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Accept ≥80%")
+        box.setText(f"Accept {len(eligible)} suggestion(s) with ≥80% confidence?")
+        box.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        box.setStyleSheet(DIALOG_STYLE)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        for card in eligible:
+            card._accept()
 
     def _accept_all(self):
         box = QMessageBox(self)
@@ -627,15 +780,56 @@ class SuggestionsPanel(QWidget):
         for card in self._cards:
             card._accept()
 
+    def _set_focus(self, index: int):
+        if not self._cards:
+            return
+        old = self._current_index
+        if 0 <= old < len(self._cards):
+            self._cards[old].set_focused(False)
+        self._current_index = max(0, min(index, len(self._cards) - 1))
+        card = self._cards[self._current_index]
+        card.set_focused(True)
+        self._scroll_to(card)
+
+    def _scroll_to(self, card):
+        QTimer.singleShot(0, lambda: self.scroll.ensureWidgetVisible(card, 0, 40))
+
+    def _step(self, direction: int):
+        """Move focus to the next card the coder can actually see.
+
+        Cards inside a collapsed section (e.g. Needs manual coding) are skipped.
+        """
+        i = self._current_index + direction
+        while 0 <= i < len(self._cards):
+            if self._cards[i].isVisibleTo(self):
+                self._set_focus(i)
+                return
+            i += direction
+
+    def _focus_first(self):
+        if not self._cards:
+            return
+        if self._cards[0].isVisibleTo(self):
+            self._set_focus(0)
+        else:
+            self._current_index = 0
+            self._step(1)
+
+    def nav_next(self):
+        self._step(1)
+
+    def nav_prev(self):
+        self._step(-1)
+
     def accept_current(self):
         if self._cards and self._current_index < len(self._cards):
             self._cards[self._current_index]._accept()
-            self._current_index = min(self._current_index + 1, len(self._cards) - 1)
+            self._step(1)
 
     def reject_current(self):
         if self._cards and self._current_index < len(self._cards):
             self._cards[self._current_index]._reject()
-            self._current_index = min(self._current_index + 1, len(self._cards) - 1)
+            self._step(1)
 
     def edit_current(self):
         if self._cards and self._current_index < len(self._cards):
@@ -665,17 +859,22 @@ class SuggestionsPanel(QWidget):
             category = CATEGORY_MAP.get(s.get("suggestion_type"), "Associative Diagnoses")
             grouped.setdefault(category, []).append(s)
 
+        # Anything the NLP couldn't code goes into one collapsed section at the
+        # bottom, so the coded sections only hold real suggestions. Medications
+        # stay put: they normally have no ICD code.
+        categories = ["Principal Diagnosis", "Associative Diagnoses", "Procedures", "Medications"]
+        manual = []
+        for category in categories[:3]:
+            manual += [s for s in grouped.get(category, []) if not s.get("icd_code")]
+            grouped[category] = [s for s in grouped.get(category, []) if s.get("icd_code")]
+
         insert_pos = 0
-        for category in ["Principal Diagnosis", "Associative Diagnoses", "Procedures", "Medications"]:
+        for category in categories:
             items = grouped.get(category, [])
             if not items:
                 continue
             is_principal_section = (category == "Principal Diagnosis")
 
-            # Coded suggestions are the coder's actual work. Uncoded ones are
-            # things the pipeline found but could not map — still shown, because
-            # the coder can hit E and code them by hand, but folded into a
-            # sub-drawer inside their own section rather than listed separately.
             coded   = [s for s in items if s.get("icd_code")]
             uncoded = [s for s in items if not s.get("icd_code")]
             coded.sort(key=lambda s: -(s.get("confidence_score") or 0))
@@ -686,20 +885,14 @@ class SuggestionsPanel(QWidget):
             body_lay.setContentsMargins(0, 0, 0, 0)
             body_lay.setSpacing(16)
 
-            for item in coded:
+            for item in coded + uncoded:
                 card = SuggestionCard(item, is_principal=is_principal_section)
-                self._cards.append(card)
+                if category != "Medications":
+                    self._cards.append(card)
                 body_lay.addWidget(card)
 
-            if uncoded:
-                sub_body = self._make_card_holder(uncoded, False, visible=False)
-                sub_header = SectionHeader(
-                    "Needs manual coding", len(uncoded),
-                    on_toggle=lambda shown, b=sub_body: b.setVisible(shown),
-                    expanded=False, style_key="Needs manual coding", compact=True,
-                )
-                body_lay.addWidget(sub_header)
-                body_lay.addWidget(sub_body)
+            if category == "Medications":
+                body_lay.addWidget(self._make_add_medication_row(body_lay))
 
             header = SectionHeader(
                 category, len(items),
@@ -710,6 +903,71 @@ class SuggestionsPanel(QWidget):
             insert_pos += 1
             self.cards_layout.insertWidget(insert_pos, body)
             insert_pos += 1
+
+        if manual:
+            manual_body = self._make_card_holder(manual, False, visible=False)
+            manual_header = SectionHeader(
+                "Needs manual coding", len(manual),
+                on_toggle=lambda shown, b=manual_body: b.setVisible(shown),
+                expanded=False, style_key="Needs manual coding",
+            )
+            self.cards_layout.insertWidget(insert_pos, manual_header)
+            insert_pos += 1
+            self.cards_layout.insertWidget(insert_pos, manual_body)
+            insert_pos += 1
+
+        if self._cards:
+            QTimer.singleShot(100, self._focus_first)
+
+    def _make_add_medication_row(self, parent_layout: QVBoxLayout) -> QWidget:
+        row = QWidget()
+        row.setStyleSheet(
+            f"background:{BG_EDIT}; border-radius:6px; border:1px dashed {BORDER};"
+        )
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(8)
+
+        field = QLineEdit()
+        field.setPlaceholderText("Add medication…")
+        field.setFont(QFont("Segoe UI", 11))
+        field.setFixedHeight(28)
+        field.setStyleSheet(f"""
+            QLineEdit {{
+                background: {BG_APP}; color: {TEXT_PRI};
+                border: 1px solid {BORDER}; border-radius: 4px;
+                padding: 0 8px;
+            }}
+            QLineEdit:focus {{ border-color: {ACCENT}; }}
+        """)
+
+        btn_add = QPushButton("+ Add")
+        btn_add.setFixedSize(54, 28)
+        btn_add.setStyleSheet(f"""
+            QPushButton {{
+                background: {ACCENT}; color: white;
+                border: none; border-radius: 4px;
+                font-size: 11px; font-weight: bold;
+            }}
+            QPushButton:hover {{ background: {ACCENT_LITE}; }}
+        """)
+
+        def _add():
+            name = field.text().strip()
+            if not name:
+                return
+            new_item = {"icd_code": "", "icd_description": name,
+                        "suggestion_type": "medication", "confidence_score": None,
+                        "source_snippet": ""}
+            card = SuggestionCard(new_item)
+            parent_layout.insertWidget(parent_layout.count() - 1, card)
+            field.clear()
+
+        btn_add.clicked.connect(_add)
+        field.returnPressed.connect(_add)
+        lay.addWidget(field, 1)
+        lay.addWidget(btn_add)
+        return row
 
     def _make_card_holder(self, items, is_principal, visible):
         """Wrap a set of cards so the whole group can be shown or hidden at once."""
@@ -734,7 +992,7 @@ class ChatBubble(QFrame):
         if is_user:
             self.setStyleSheet(f"""
                 ChatBubble {{
-                    background: #1A3554;
+                    background: {BG_CHAT_USR};
                     border-radius: 10px;
                     border-top-right-radius: 3px;
                     border-left: 2px solid {ACCENT};
@@ -743,7 +1001,7 @@ class ChatBubble(QFrame):
         else:
             self.setStyleSheet(f"""
                 ChatBubble {{
-                    background: #111E2B;
+                    background: {BG_CHAT_BOT};
                     border-radius: 10px;
                     border-top-left-radius: 3px;
                     border-left: 2px solid #1E5A3A;
@@ -777,9 +1035,6 @@ class ChatBubble(QFrame):
         line.setFixedHeight(1)
         lay.addWidget(line)
 
-        # The model replies in markdown; a RichText label speaks HTML, so the
-        # raw ** and ### were being shown literally. Convert instead of asking
-        # the model not to format — emphasis on code names is worth keeping.
         msg = QLabel(markdown_to_html(text))
         msg.setFont(QFont("Segoe UI", 11))
         msg.setStyleSheet(f"color:{TEXT_PRI}; background:transparent;")
@@ -814,7 +1069,7 @@ class ChatPanel(QWidget):
         header.setFixedHeight(64)
         header.setStyleSheet(
             f"background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            f"stop:0 #0D1E30, stop:1 #112238);"
+            f"stop:0 {BG_CHAT_H}, stop:1 {BG_CHAT_H2});"
             f"border-bottom: 1px solid {BORDER};"
         )
         h_lay = QVBoxLayout(header)
@@ -830,18 +1085,6 @@ class ChatPanel(QWidget):
         dot.setStyleSheet("color:#27AE60; font-size:9px; font-weight:bold;")
         top_row.addWidget(dot)
         h_lay.addLayout(top_row)
-
-        bot_row = QHBoxLayout()
-        bot_row.setSpacing(6)
-        for tag in ["DB-BACKED", "RULE-BASED", "SECURE"]:
-            t = QLabel(tag)
-            t.setStyleSheet(
-                f"color:{TEXT_SEC}; background:#0A1520; border:1px solid {BORDER};"
-                f"border-radius:3px; padding:0px 5px; font-size:9px;"
-            )
-            bot_row.addWidget(t)
-        bot_row.addStretch()
-        h_lay.addLayout(bot_row)
 
         root.addWidget(header)
 
@@ -871,7 +1114,7 @@ class ChatPanel(QWidget):
         input_bar = QWidget()
         input_bar.setFixedHeight(72)
         input_bar.setStyleSheet(
-            f"background:#0D1E30; border-top:1px solid {ACCENT};"
+            f"background:{BG_CHAT_H}; border-top:1px solid {ACCENT};"
         )
         ib_outer = QVBoxLayout(input_bar)
         ib_outer.setContentsMargins(12, 8, 12, 8)
@@ -892,7 +1135,7 @@ class ChatPanel(QWidget):
         self.input_box.setFixedHeight(34)
         self.input_box.setStyleSheet(f"""
             QLineEdit {{
-                background: #0A1520;
+                background: {BG_TOP};
                 color: {TEXT_CODE};
                 border: 1px solid {BORDER};
                 border-radius: 5px;
@@ -926,6 +1169,9 @@ class ChatPanel(QWidget):
     def load_history(self, document_id: int):
         self.document_id = document_id
         messages = api_client.get_chat_history(document_id)
+        if api_client.LAST_ERROR:
+            self._add_bubble("system", "Couldn't load earlier messages for this record.")
+            return
         for msg in messages:
             role = "user" if msg.get("sender") == "coder" else "system"
             self._add_bubble(role, msg.get("message_text", ""))
@@ -952,7 +1198,7 @@ class ChatPanel(QWidget):
     def _add_typing_indicator(self):
         bubble = QFrame()
         bubble.setStyleSheet(
-            f"background:#111E2B; border-radius:10px; border-left:2px solid #1E5A3A;"
+            f"background:{BG_CHAT_BOT}; border-radius:10px; border-left:2px solid #1E5A3A;"
         )
         b_lay = QHBoxLayout(bubble)
         b_lay.setContentsMargins(12, 8, 12, 8)
@@ -1010,6 +1256,10 @@ class CodingWorkspace(QMainWindow):
         super().__init__()
         self.document_id = document_id
         self.on_back = on_back
+        self._shortcuts = []
+        self._cached_raw_text = ""
+        self._cached_patient_ref = ""
+        self._cached_suggestions = []
         self.setWindowTitle("SIUT — Clinical Coding Workspace")
         self.resize(1400, 860)
         self._apply_global_style()
@@ -1028,15 +1278,23 @@ class CodingWorkspace(QMainWindow):
         """)
 
     def _setup_shortcuts(self):
-        QShortcut(QKeySequence("A"), self, activated=self.suggestions_panel.accept_current)
-        QShortcut(QKeySequence("R"), self, activated=self.suggestions_panel.reject_current)
-        QShortcut(QKeySequence("E"), self, activated=self.suggestions_panel.edit_current)
+        for sc in self._shortcuts:
+            sc.setEnabled(False)
+        self._shortcuts = [
+            QShortcut(QKeySequence("A"),    self, activated=self.suggestions_panel.accept_current),
+            QShortcut(QKeySequence("R"),    self, activated=self.suggestions_panel.reject_current),
+            QShortcut(QKeySequence("E"),    self, activated=self.suggestions_panel.edit_current),
+            QShortcut(QKeySequence("Down"), self, activated=self.suggestions_panel.nav_next),
+            QShortcut(QKeySequence("Up"),   self, activated=self.suggestions_panel.nav_prev),
+            QShortcut(QKeySequence("J"),    self, activated=self.suggestions_panel.nav_next),
+            QShortcut(QKeySequence("K"),    self, activated=self.suggestions_panel.nav_prev),
+        ]
 
     def _build_ui(self):
         top_bar = QWidget()
         top_bar.setFixedHeight(52)
         top_bar.setStyleSheet(
-            f"background:#0A1520; border-bottom:1px solid {BORDER};"
+            f"background:{BG_TOP}; border-bottom:1px solid {BORDER};"
         )
         tb_lay = QHBoxLayout(top_bar)
         tb_lay.setContentsMargins(20, 0, 20, 0)
@@ -1062,6 +1320,20 @@ class CodingWorkspace(QMainWindow):
         tb_lay.addWidget(make_label("Coding Workspace", 12, color=TEXT_SEC))
         tb_lay.addStretch()
 
+        theme_label = "☀  Light" if theme.is_dark() else "🌙  Dark"
+        self.theme_btn = QPushButton(theme_label)
+        self.theme_btn.setFixedSize(88, 34)
+        self.theme_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: 1px solid {BORDER}; border-radius: 6px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+        """)
+        self.theme_btn.clicked.connect(self._toggle_theme)
+        tb_lay.addWidget(self.theme_btn)
+
         self.submit_btn = QPushButton("Submit Review")
         self.submit_btn.setFixedSize(120, 34)
         self.submit_btn.setStyleSheet(f"""
@@ -1075,28 +1347,24 @@ class CodingWorkspace(QMainWindow):
         self.submit_btn.clicked.connect(self._submit_review)
         tb_lay.addWidget(self.submit_btn)
 
-        body = QWidget()
-        body_lay = QHBoxLayout(body)
-        body_lay.setContentsMargins(0, 0, 0, 0)
-        body_lay.setSpacing(1)
-
         self.discharge_panel   = DischargeSummaryPanel()
         self.suggestions_panel = SuggestionsPanel()
         self.chat_panel        = ChatPanel()
 
-        def framed(w: QWidget) -> QFrame:
-            f = QFrame()
-            f.setFrameShape(QFrame.Shape.NoFrame)
-            f.setStyleSheet(f"background:{BG_PANEL}; border-right:1px solid {BORDER};")
-            fl = QVBoxLayout(f)
-            fl.setContentsMargins(0, 0, 0, 0)
-            fl.setSpacing(0)
-            fl.addWidget(w)
-            return f
-
-        body_lay.addWidget(framed(self.discharge_panel),   30)
-        body_lay.addWidget(framed(self.suggestions_panel), 37)
-        body_lay.addWidget(self.chat_panel,                33)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(4)
+        splitter.setStyleSheet(f"""
+            QSplitter::handle {{
+                background: {BORDER};
+            }}
+            QSplitter::handle:hover {{
+                background: {ACCENT};
+            }}
+        """)
+        splitter.addWidget(self.discharge_panel)
+        splitter.addWidget(self.suggestions_panel)
+        splitter.addWidget(self.chat_panel)
+        splitter.setSizes([420, 500, 450])
 
         central = QWidget()
         central.setStyleSheet(f"background:{BG_APP};")
@@ -1104,37 +1372,51 @@ class CodingWorkspace(QMainWindow):
         main_lay.setContentsMargins(0, 0, 0, 0)
         main_lay.setSpacing(0)
         main_lay.addWidget(top_bar)
-        main_lay.addWidget(body, 1)
+        main_lay.addWidget(splitter, 1)
 
         self.setCentralWidget(central)
+
+    def _toggle_theme(self):
+        theme.toggle()
+        _reload_colors()
+        old_central = self.centralWidget()
+        self._apply_global_style()
+        self._build_ui()
+        self._setup_shortcuts()
+        if self._cached_raw_text:
+            self.discharge_panel.set_text(self._cached_raw_text, self._cached_patient_ref)
+        if self._cached_suggestions:
+            self.suggestions_panel.load(self._cached_suggestions)
+        if old_central:
+            old_central.setParent(None)
+            old_central.deleteLater()
 
     def _load_data(self):
         self.suggestions_panel.show_loading()
 
-        try:
-            raw_text = api_client.get_raw_text(self.document_id)
-            docs     = api_client.get_documents()
-            doc      = next((d for d in docs if d["document_id"] == self.document_id), {})
-            self.discharge_panel.set_text(raw_text, doc.get("patient_ref", ""))
-        except Exception as e:
-            self.discharge_panel.set_text(f"Error loading document: {e}")
+        # Stop at the first failed call: one clear message instead of three
+        # failures in a row and a blank screen that looks like "no suggestions".
+        raw_text = api_client.get_raw_text(self.document_id)
+        docs = [] if api_client.LAST_ERROR else api_client.get_documents()
+        suggestions = [] if api_client.LAST_ERROR else api_client.get_suggestions(self.document_id)
+        if api_client.LAST_ERROR:
+            self.discharge_panel.set_text("Couldn't load this discharge summary.")
+            self.suggestions_panel.show_load_error(api_client.LAST_ERROR, self._load_data)
+            return
 
-        try:
-            suggestions = api_client.get_suggestions(self.document_id)
-            self.suggestions_panel.load(suggestions)
-        except Exception:
-            self.suggestions_panel.load([])
+        doc = next((d for d in docs if d["document_id"] == self.document_id), {})
+        self._cached_raw_text    = raw_text
+        self._cached_patient_ref = doc.get("patient_ref", "")
+        self.discharge_panel.set_text(raw_text, self._cached_patient_ref)
 
-        try:
-            self.chat_panel.load_history(self.document_id)
-        except Exception:
-            pass
+        self._cached_suggestions = suggestions
+        self.suggestions_panel.load(suggestions)
+
+        self.chat_panel.load_history(self.document_id)
 
     def _submit_review(self):
         self.submit_btn.setEnabled(False)
         self.submit_btn.setText("Submitting…")
-        # api_client no longer raises, so the old except branch never ran and
-        # the button stayed on "Submitting..." forever after a failure.
         result = api_client.mark_complete(self.document_id)
         if isinstance(result, dict) and result.get("error"):
             self.submit_btn.setEnabled(True)
@@ -1152,7 +1434,8 @@ class CodingWorkspace(QMainWindow):
     def _go_back(self):
         if self.on_back:
             self.on_back()
-        self.close()
+        else:
+            self.close()
 
 
 if __name__ == "__main__":

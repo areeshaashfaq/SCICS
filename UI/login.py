@@ -1,6 +1,7 @@
 import sys
 import api_client
 import session
+import theme
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QFrame
@@ -8,15 +9,32 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
-BG_APP   = "#0F1923"
-BG_CARD  = "#1C2D3E"
-BG_DARK  = "#0A1520"
-BORDER   = "#253D52"
-ACCENT   = "#2E7DD1"
-ACCENT_L = "#3D8FE8"
-DANGER   = "#C0392B"
-TEXT_PRI = "#E8EDF2"
-TEXT_SEC = "#8FA8BF"
+BG_APP = BG_CARD = BG_TOP = BORDER = ""
+ACCENT = ACCENT_L = DANGER = ""
+TEXT_PRI = TEXT_SEC = ""
+SEC_HOVER = SEC_PRINCIPAL = ""
+
+
+def _reload_colors():
+    global BG_APP, BG_CARD, BG_TOP, BORDER
+    global ACCENT, ACCENT_L, DANGER
+    global TEXT_PRI, TEXT_SEC
+    global SEC_HOVER, SEC_PRINCIPAL
+    t = theme.current
+    BG_APP        = t["BG_APP"]
+    BG_CARD       = t["BG_CARD"]
+    BG_TOP        = t["BG_TOP"]
+    BORDER        = t["BORDER"]
+    ACCENT        = t["ACCENT"]
+    ACCENT_L      = t["ACCENT_LITE"]
+    DANGER        = t["DANGER"]
+    TEXT_PRI      = t["TEXT_PRI"]
+    TEXT_SEC      = t["TEXT_SEC"]
+    SEC_HOVER     = t["SEC_HOVER"]
+    SEC_PRINCIPAL = t["SEC_PRINCIPAL"]
+
+
+_reload_colors()
 
 
 # ── clickable role button ─────────────────────────────────────────────────────
@@ -52,19 +70,19 @@ class RoleCard(QFrame):
     def _style_default(self):
         self.setStyleSheet(f"""
             RoleCard {{
-                background: {BG_DARK};
+                background: {BG_TOP};
                 border: none;
                 border-radius: 8px;
             }}
             RoleCard:hover {{
-                background: #112030;
+                background: {SEC_HOVER};
             }}
         """)
 
     def _style_selected(self):
         self.setStyleSheet(f"""
             RoleCard {{
-                background: #0D2540;
+                background: {SEC_PRINCIPAL};
                 border: 2px solid {ACCENT};
                 border-radius: 8px;
             }}
@@ -95,11 +113,57 @@ class LoginWindow(QMainWindow):
         )
         self._build_ui()
 
+    def _toggle_theme(self):
+        theme.toggle()
+        _reload_colors()
+
+        username = self.username_input.text()
+        role = self._selected_role
+
+        old = self.centralWidget()
+        self.setStyleSheet(
+            f"QMainWindow {{ background:{BG_APP}; }} QWidget {{ background:{BG_APP}; }}"
+        )
+        self._build_ui()
+
+        self.username_input.setText(username)
+        if role:
+            self._select_role(role)
+
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(theme.get_app_style())
+
+        if old:
+            old.setParent(None)
+            old.deleteLater()
+
     def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
         outer = QVBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
+
+        # theme toggle in top-right corner
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 10, 14, 0)
+        top_row.addStretch()
+        theme_btn = QPushButton("☀" if theme.is_dark() else "◑")
+        theme_btn.setFixedSize(30, 30)
+        theme_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent; color: {TEXT_SEC};
+                border: 1px solid {BORDER}; border-radius: 6px;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{ color:{TEXT_PRI}; border-color:{ACCENT}; }}
+        """)
+        theme_btn.setToolTip("Switch to light theme" if theme.is_dark() else "Switch to dark theme")
+        theme_btn.clicked.connect(self._toggle_theme)
+        top_row.addWidget(theme_btn)
+        outer.addLayout(top_row)
+
         outer.addStretch()
 
         # ── centred card ──────────────────────────────────────────────────────
@@ -260,7 +324,7 @@ class LoginWindow(QMainWindow):
             inp.setEchoMode(QLineEdit.EchoMode.Password)
         inp.setStyleSheet(f"""
             QLineEdit {{
-                background: {BG_DARK}; color: {TEXT_PRI};
+                background: {BG_TOP}; color: {TEXT_PRI};
                 border: 1px solid {BORDER}; border-radius: 6px;
                 padding: 0 12px;
             }}
@@ -312,7 +376,7 @@ class LoginWindow(QMainWindow):
             self.password_input.setFocus()
             return
         if error == "connection_failed":
-            self._show_error("Cannot reach the server. Check your connection.")
+            self._show_error(result.get("message") or "Cannot reach the server. Check your connection.")
             return
 
         if result.get("role") != self._selected_role:

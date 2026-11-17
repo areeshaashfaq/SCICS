@@ -261,7 +261,7 @@ FAKE_CORRECTIONS = [
         "correction_id": 1, "suggestion_id": 101,
         "original_icd_code": "N17.9", "corrected_icd_code": None,
         "icd_description": "Acute kidney injury, unspecified",
-        "correction_type": "accept", "coder_name": "Fatimah M.",
+        "correction_type": "confirmed", "coder_name": "Fatimah M.",
         "comment": "", "corrected_at": "2026-06-12T14:32:00",
         "document_id": 1, "patient_ref": "00247-KHI",
         "source_filename": "051904.txt",
@@ -270,7 +270,7 @@ FAKE_CORRECTIONS = [
         "correction_id": 2, "suggestion_id": 102,
         "original_icd_code": "E11.9", "corrected_icd_code": None,
         "icd_description": "Type 2 diabetes mellitus without complications",
-        "correction_type": "accept", "coder_name": "Fatimah M.",
+        "correction_type": "confirmed", "coder_name": "Fatimah M.",
         "comment": "", "corrected_at": "2026-06-12T14:33:00",
         "document_id": 1, "patient_ref": "00247-KHI",
         "source_filename": "051904.txt",
@@ -279,7 +279,7 @@ FAKE_CORRECTIONS = [
         "correction_id": 3, "suggestion_id": 103,
         "original_icd_code": "I10", "corrected_icd_code": None,
         "icd_description": "Essential (primary) hypertension",
-        "correction_type": "reject", "coder_name": "Fatimah M.",
+        "correction_type": "rejected", "coder_name": "Fatimah M.",
         "comment": "Not relevant to this admission",
         "corrected_at": "2026-06-12T14:34:00",
         "document_id": 1, "patient_ref": "00247-KHI",
@@ -289,7 +289,7 @@ FAKE_CORRECTIONS = [
         "correction_id": 4, "suggestion_id": 104,
         "original_icd_code": "5A1D70Z", "corrected_icd_code": None,
         "icd_description": "Performance of Urinary Filtration (Haemodialysis)",
-        "correction_type": "accept", "coder_name": "Fatimah M.",
+        "correction_type": "confirmed", "coder_name": "Fatimah M.",
         "comment": "", "corrected_at": "2026-06-12T14:34:00",
         "document_id": 1, "patient_ref": "00247-KHI",
         "source_filename": "051904.txt",
@@ -298,7 +298,7 @@ FAKE_CORRECTIONS = [
         "correction_id": 5, "suggestion_id": 201,
         "original_icd_code": "J12.1", "corrected_icd_code": "J12.0",
         "icd_description": "RSV Pneumonia",
-        "correction_type": "edit", "coder_name": "Fatimah M.",
+        "correction_type": "reclassified", "coder_name": "Fatimah M.",
         "comment": "More specific code applies",
         "corrected_at": "2026-06-13T10:10:00",
         "document_id": 2, "patient_ref": "00312-KHI",
@@ -308,7 +308,7 @@ FAKE_CORRECTIONS = [
         "correction_id": 6, "suggestion_id": 202,
         "original_icd_code": "I10", "corrected_icd_code": None,
         "icd_description": "Essential (primary) hypertension",
-        "correction_type": "accept", "coder_name": "Fatimah M.",
+        "correction_type": "confirmed", "coder_name": "Fatimah M.",
         "comment": "", "corrected_at": "2026-06-13T10:11:00",
         "document_id": 2, "patient_ref": "00312-KHI",
         "source_filename": "490434.txt",
@@ -317,40 +317,12 @@ FAKE_CORRECTIONS = [
         "correction_id": 7, "suggestion_id": 203,
         "original_icd_code": "R60.9", "corrected_icd_code": None,
         "icd_description": "Oedema, unspecified",
-        "correction_type": "reject", "coder_name": "Fatimah M.",
+        "correction_type": "rejected", "coder_name": "Fatimah M.",
         "comment": "", "corrected_at": "2026-06-13T10:12:00",
         "document_id": 2, "patient_ref": "00312-KHI",
         "source_filename": "490434.txt",
     },
 ]
-
-FAKE_ANALYTICS = {
-    "total_documents":    24,
-    "pending_documents":   7,
-    "complete_documents": 17,
-    "total_suggestions":  112,
-    "accepted":            89,
-    "rejected":            15,
-    "edited":               8,
-    "acceptance_rate":     0.79,
-    "avg_confidence":      0.81,
-    "flagged_ambiguous":    6,
-    "top_corrected_codes": [
-        {"icd_code": "N17.9",   "description": "Acute kidney injury, unspecified",        "corrections": 8},
-        {"icd_code": "E11.9",   "description": "Type 2 diabetes mellitus",                "corrections": 5},
-        {"icd_code": "I10",     "description": "Essential (primary) hypertension",        "corrections": 4},
-        {"icd_code": "J18.9",   "description": "Pneumonia, unspecified organism",         "corrections": 3},
-        {"icd_code": "N18.3",   "description": "Chronic kidney disease, stage 3",         "corrections": 2},
-    ],
-    "recent_activity": [
-        {"action": "approved", "icd_code": "N17.9",          "coder": "Fatimah M.", "patient_ref": "00247-KHI", "timestamp": "2026-08-07T10:45:00"},
-        {"action": "rejected", "icd_code": "I10",            "coder": "Fatimah M.", "patient_ref": "00247-KHI", "timestamp": "2026-08-07T10:44:00"},
-        {"action": "edited",   "icd_code": "J12.1 → J12.0", "coder": "Fatimah M.", "patient_ref": "00312-KHI", "timestamp": "2026-08-06T15:22:00"},
-        {"action": "approved", "icd_code": "E11.9",          "coder": "Fatimah M.", "patient_ref": "00312-KHI", "timestamp": "2026-08-06T15:21:00"},
-        {"action": "approved", "icd_code": "5A1D70Z",        "coder": "Fatimah M.", "patient_ref": "00247-KHI", "timestamp": "2026-08-06T15:20:00"},
-        {"action": "rejected", "icd_code": "R60.9",          "coder": "Fatimah M.", "patient_ref": "00312-KHI", "timestamp": "2026-08-06T15:19:00"},
-    ],
-}
 
 FAKE_USERS = [
     {"username": "fatimah", "password": "coder123", "role": "coder",  "name": "Fatimah M."},
@@ -369,34 +341,37 @@ def get_analytics():
     from collections import Counter
     # FAKE_CORRECTIONS is the single source of truth:
     # submit_decision writes here, submit_correction writes here, pre-seeded data is here
-    accepted  = sum(1 for c in FAKE_CORRECTIONS if c.get("correction_type") == "accept")
-    rejected  = sum(1 for c in FAKE_CORRECTIONS if c.get("correction_type") == "reject")
-    edits     = [c for c in FAKE_CORRECTIONS if c.get("correction_type") == "edit"]
+    accepted  = sum(1 for c in FAKE_CORRECTIONS if c.get("correction_type") == "confirmed")
+    rejected  = sum(1 for c in FAKE_CORRECTIONS if c.get("correction_type") == "rejected")
+    edits     = [c for c in FAKE_CORRECTIONS if c.get("correction_type") == "reclassified"]
     total_dec = accepted + rejected + len(edits)
-    acc_rate  = round(accepted / total_dec, 2) if total_dec else 0.0
+    acc_rate  = accepted / total_dec if total_dec else 0.0
     confs     = [s["confidence_score"] for s in FAKE_SUGGESTIONS if s.get("confidence_score")]
-    avg_conf  = round(sum(confs) / len(confs), 2) if confs else 0.0
-    complete  = [d for d in FAKE_DOCUMENTS if d.get("status") == "complete"]
-    pending   = [d for d in FAKE_DOCUMENTS if d.get("status") != "complete"]
+    avg_conf  = sum(confs) / len(confs) if confs else 0.0
+    complete  = [d for d in FAKE_DOCUMENTS if d.get("status") in ("reviewed", "finalized")]
+    pending   = [d for d in FAKE_DOCUMENTS if d.get("status") not in ("reviewed", "finalized")]
 
-    # top corrected codes from corrections list
-    code_counts = Counter(c["original_icd_code"] for c in FAKE_CORRECTIONS)
+    # top corrected codes: like the real backend, only rows where the coder
+    # supplied a new code, grouped by that new code
+    code_counts = Counter(c["corrected_icd_code"] for c in FAKE_CORRECTIONS
+                          if c.get("corrected_icd_code"))
     top_codes = []
     for code, count in code_counts.most_common(5):
-        desc = next((s["icd_description"] for s in FAKE_SUGGESTIONS
-                     if s["icd_code"] == code), "")
+        desc = next((c["icd_description"] for c in FAKE_CORRECTIONS
+                     if c.get("corrected_icd_code") == code), "")
         top_codes.append({"icd_code": code, "description": desc, "corrections": count})
 
     # recent activity from corrections, newest first
-    recent = sorted(FAKE_CORRECTIONS, key=lambda c: c.get("corrected_at",""), reverse=True)[:6]
+    recent = sorted(FAKE_CORRECTIONS, key=lambda c: c.get("corrected_at",""), reverse=True)[:10]
     activity = []
     for c in recent:
         activity.append({
-            "action":      c.get("correction_type", ""),
-            "icd_code":    c.get("corrected_icd_code") or c.get("original_icd_code", ""),
-            "coder":       c.get("coder_name", ""),
-            "patient_ref": c.get("patient_ref", ""),
-            "timestamp":   c.get("corrected_at", ""),
+            "correction_type": c.get("correction_type", ""),
+            "icd_code":        c.get("corrected_icd_code") or c.get("original_icd_code", ""),
+            "description":     c.get("icd_description", ""),
+            "coder_name":      c.get("coder_name", ""),
+            "corrected_at":    c.get("corrected_at", ""),
+            "patient_ref":     c.get("patient_ref", ""),
         })
 
     return {
@@ -426,14 +401,14 @@ def get_suggestions(document_id: int):
 def get_raw_text(document_id: int):
     return FAKE_RAW_TEXTS.get(document_id, "")
 
-def submit_decision(suggestion_id: int, decision: str):
-    from datetime import datetime
+def submit_decision(suggestion_id: int, decision: str, coder_name: str = "coder"):
+    from datetime import datetime, timezone
     # update suggestion row
     sugg = next((s for s in FAKE_SUGGESTIONS if s["suggestion_id"] == suggestion_id), {})
     sugg["coder_decision"] = decision
 
     # also write a correction record so analytics picks it up
-    correction_type = "accept" if decision == "approved" else "reject"
+    correction_type = "confirmed" if decision == "approved" else "rejected"
     new_id = max((c["correction_id"] for c in FAKE_CORRECTIONS), default=0) + 1
     FAKE_CORRECTIONS.append({
         "correction_id":      new_id,
@@ -442,9 +417,9 @@ def submit_decision(suggestion_id: int, decision: str):
         "corrected_icd_code": None,
         "icd_description":    sugg.get("icd_description", ""),
         "correction_type":    correction_type,
-        "coder_name":         "Fatimah M.",
+        "coder_name":         coder_name,
         "comment":            "",
-        "corrected_at":       datetime.now().isoformat(timespec="seconds"),
+        "corrected_at":       datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "document_id":        sugg.get("document_id", 0),
         "patient_ref":        next((d["patient_ref"] for d in FAKE_DOCUMENTS
                                     if d["document_id"] == sugg.get("document_id")), ""),
@@ -453,8 +428,8 @@ def submit_decision(suggestion_id: int, decision: str):
     })
     return {"status": "ok"}
 
-def submit_correction(suggestion_id: int, corrected_icd_code: str):
-    from datetime import datetime
+def submit_correction(suggestion_id: int, corrected_icd_code: str, coder_name: str = "coder"):
+    from datetime import datetime, timezone
     sugg = next((s for s in FAKE_SUGGESTIONS if s["suggestion_id"] == suggestion_id), {})
     new_id = max((c["correction_id"] for c in FAKE_CORRECTIONS), default=0) + 1
     FAKE_CORRECTIONS.append({
@@ -463,10 +438,10 @@ def submit_correction(suggestion_id: int, corrected_icd_code: str):
         "original_icd_code":  sugg.get("icd_code", ""),
         "corrected_icd_code": corrected_icd_code,
         "icd_description":    sugg.get("icd_description", ""),
-        "correction_type":    "edit",
-        "coder_name":         "Fatimah M.",
+        "correction_type":    "reclassified",
+        "coder_name":         coder_name,
         "comment":            "",
-        "corrected_at":       datetime.now().isoformat(timespec="seconds"),
+        "corrected_at":       datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "document_id":        sugg.get("document_id", 0),
         "patient_ref":        next((d["patient_ref"] for d in FAKE_DOCUMENTS
                                     if d["document_id"] == sugg.get("document_id")), ""),
@@ -488,7 +463,7 @@ def send_chat(document_id: int, message: str):
 def mark_complete(document_id: int):
     for doc in FAKE_DOCUMENTS:
         if doc["document_id"] == document_id:
-            doc["status"] = "complete"
+            doc["status"] = "reviewed"   # same status the real backend sets
             break
     print(f"[FAKE] Document {document_id} marked complete")
     return {"status": "ok"}

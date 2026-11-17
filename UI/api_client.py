@@ -7,8 +7,9 @@ import requests
 import json
 
 import fake_data
+import session
 
-USE_FAKE = False
+USE_FAKE = True
 
 _DEFAULT_API_URL = "http://localhost:8000"
 _CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -82,8 +83,13 @@ def _show_dialog(message):
         pass
 
 
-def _safe(default):
-    """Catch network/HTTP failures and return `default` instead of crashing."""
+def _safe(default, show_dialog=True):
+    """Catch network/HTTP failures and return `default` instead of crashing.
+
+    Loading calls pass show_dialog=False: the screen shows its own "couldn't
+    reach the server" message instead, so a failed load never stacks popups.
+    Actions the coder takes keep the popup so they know their click didn't save.
+    """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -95,13 +101,14 @@ def _safe(default):
             except requests.RequestException as exc:
                 LAST_ERROR = _describe(exc)
                 print(f"[api_client] {func.__name__} failed: {LAST_ERROR}")
-                _show_dialog(LAST_ERROR)
+                if show_dialog:
+                    _show_dialog(LAST_ERROR)
                 return default() if callable(default) else default
         return wrapper
     return decorator
 
 
-@_safe(list)
+@_safe(list, show_dialog=False)
 def get_documents():
     if USE_FAKE:
         return fake_data.get_documents()
@@ -110,7 +117,7 @@ def get_documents():
     return r.json().get("documents", [])
 
 
-@_safe(list)
+@_safe(list, show_dialog=False)
 def get_suggestions(document_id: int):
     if USE_FAKE:
         return fake_data.get_suggestions(document_id)
@@ -119,7 +126,7 @@ def get_suggestions(document_id: int):
     return r.json().get("suggestions", [])
 
 
-@_safe("")
+@_safe("", show_dialog=False)
 def get_raw_text(document_id: int):
     # raw_text comes from the documents row — in real backend fetch it from get_documents()
     if USE_FAKE:
@@ -131,14 +138,19 @@ def get_raw_text(document_id: int):
     return match.get("raw_text", "")
 
 
+def _coder_name():
+    """Name of the logged-in coder, saved with every decision for the admin view."""
+    return session.current_user.get("name") or "coder"
+
+
 @_safe(lambda: {"error": LAST_ERROR})
 def submit_decision(suggestion_id: int, decision: str):
     # decision must be "approved" or "rejected"
     if USE_FAKE:
-        return fake_data.submit_decision(suggestion_id, decision)
+        return fake_data.submit_decision(suggestion_id, decision, _coder_name())
     r = requests.patch(
         f"{BASE_URL}/suggestions/{suggestion_id}",
-        params={"decision": decision},
+        params={"decision": decision, "coder_name": _coder_name()},
         timeout=10,
     )
     r.raise_for_status()
@@ -148,18 +160,18 @@ def submit_decision(suggestion_id: int, decision: str):
 @_safe(lambda: {"error": LAST_ERROR})
 def submit_correction(suggestion_id: int, corrected_icd_code: str):
     if USE_FAKE:
-        return fake_data.submit_correction(suggestion_id, corrected_icd_code)
+        return fake_data.submit_correction(suggestion_id, corrected_icd_code, _coder_name())
     r = requests.post(
         f"{BASE_URL}/corrections/",
         json={"suggestion_id": suggestion_id, "corrected_icd_code": corrected_icd_code,
-              "correction_type": "reclassified"},
+              "correction_type": "reclassified", "coder_name": _coder_name()},
         timeout=10,
     )
     r.raise_for_status()
     return r.json()
 
 
-@_safe(list)
+@_safe(list, show_dialog=False)
 def get_chat_history(document_id: int):
     if USE_FAKE:
         return fake_data.get_chat_history(document_id)
@@ -168,7 +180,7 @@ def get_chat_history(document_id: int):
     return r.json().get("messages", [])
 
 
-@_safe(lambda: {"error": LAST_ERROR, "answer": "Sorry, I could not reach the server."})
+@_safe(lambda: {"error": LAST_ERROR, "answer": "Sorry, I could not reach the server."}, show_dialog=False)
 def send_chat(document_id: int, message: str):
     if USE_FAKE:
         return fake_data.send_chat(document_id, message)
@@ -182,7 +194,7 @@ def send_chat(document_id: int, message: str):
     return r.json()
 
 
-@_safe(lambda: {"error": "connection_failed", "message": LAST_ERROR})
+@_safe(lambda: {"error": "connection_failed", "message": LAST_ERROR}, show_dialog=False)
 def login(username: str, password: str):
     if USE_FAKE:
         return fake_data.login(username, password)
@@ -197,7 +209,7 @@ def login(username: str, password: str):
     return r.json()
 
 
-@_safe(dict)
+@_safe(dict, show_dialog=False)
 def get_analytics():
     if USE_FAKE:
         return fake_data.get_analytics()
@@ -206,7 +218,7 @@ def get_analytics():
     return r.json()
 
 
-@_safe(list)
+@_safe(list, show_dialog=False)
 def get_corrections():
     if USE_FAKE:
         return fake_data.get_corrections()
